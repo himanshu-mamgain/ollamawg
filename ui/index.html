@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ollamawg</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2318211D'/%3E%3Crect x='3' y='3' width='3' height='10' fill='%2335A07A'/%3E%3Crect x='8' y='6' width='5' height='2' fill='%23fff'/%3E%3Crect x='8' y='9' width='3' height='2' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="app.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#24302b"/><rect x="3" y="3" width="3" height="10" fill="#35A07A"/><rect x="8" y="6" width="5" height="2" fill="#fff"/><rect x="8" y="9" width="3" height="2" fill="#fff"/></svg>
+    <h1>ollamawg</h1>
+  </div>
+  <dl class="facts" id="facts">
+    <div><dt>WireGuard</dt><dd id="f-endpoint">…</dd></div>
+    <div><dt>Inside tunnel</dt><dd id="f-tunnel" class="mono">…</dd></div>
+    <div><dt>Ollama</dt><dd id="f-upstream">…</dd></div>
+    <div><dt>Running for</dt><dd id="f-uptime">…</dd></div>
+  </dl>
+  <button class="btn primary" id="btn-add">Add device</button>
+</header>
+
+<main>
+  <section class="readout" aria-label="Last 24 hours">
+    <div class="read"><span class="num" id="r-online">–</span><span class="lbl">devices connected</span></div>
+    <div class="read"><span class="num" id="r-req">–</span><span class="lbl">requests, 24 h</span></div>
+    <div class="read"><span class="num" id="r-tok">–</span><span class="lbl">tokens, 24 h</span></div>
+    <div class="read warn"><span class="num" id="r-denied">–</span><span class="lbl">requests denied</span></div>
+    <div class="read stop"><span class="num" id="r-drop">–</span><span class="lbl">packets dropped</span></div>
+  </section>
+
+  <section class="grid-traffic">
+    <div class="panel" id="traffic">
+      <div class="panel-head">
+        <h2>Traffic</h2>
+        <div class="seg" role="group" aria-label="Metric">
+          <button data-metric="requests" aria-pressed="true">Requests</button>
+          <button data-metric="tokens" aria-pressed="false">Tokens</button>
+        </div>
+        <div class="seg" role="group" aria-label="Window">
+          <button data-window="1h" aria-pressed="true">1 h</button>
+          <button data-window="6h" aria-pressed="false">6 h</button>
+          <button data-window="24h" aria-pressed="false">24 h</button>
+        </div>
+      </div>
+      <p class="hint">Allowed traffic rises above the line, by device. Below it: requests the policy denied and packets the firewall dropped.</p>
+      <div class="chart" id="chart"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="panel" id="models">
+      <div class="panel-head"><h2>Models</h2><span class="sub">since server start</span></div>
+      <div id="model-bars"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Devices</h2>
+      <span class="sub" id="dev-sub"></span>
+    </div>
+    <div id="devices" class="strips"></div>
+  </section>
+
+  <section class="grid-net">
+    <div class="panel">
+      <div class="panel-head"><h2>Who is knocking</h2><span class="sub" id="src-sub">UDP sources hitting the WireGuard port</span></div>
+      <div class="table-wrap">
+        <table class="tbl" id="sources">
+          <thead><tr><th>Source</th><th>Seen as</th><th class="r">Packets</th><th class="r">Dropped</th><th>Last seen</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Firewall</h2>
+        <label class="inline">Unlisted IPs
+          <select id="fw-default">
+            <option value="allow">are allowed</option>
+            <option value="deny">are dropped</option>
+          </select>
+        </label>
+      </div>
+      <form id="fw-form" class="fw-form">
+        <select name="action" aria-label="Action"><option value="block">Block</option><option value="allow">Allow</option></select>
+        <input name="cidr" placeholder="IP or CIDR" required aria-label="IP or CIDR">
+        <input name="note" placeholder="Note (optional)" aria-label="Note">
+        <button class="btn">Add rule</button>
+      </form>
+      <ul id="rules" class="rules"></ul>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="access">Requests</button>
+        <button role="tab" aria-selected="false" data-tab="events">Security events</button>
+      </div>
+      <label class="inline"><select id="log-device"><option value="">All devices</option></select></label>
+      <label class="inline check"><input type="checkbox" id="log-denied"> Denied only</label>
+      <button class="btn ghost" id="log-pause" aria-pressed="false">Pause</button>
+    </div>
+    <div class="table-wrap log">
+      <table class="tbl" id="log"><thead></thead><tbody></tbody></table>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg-add">
+  <form method="dialog" id="add-form">
+    <h3>Add a device</h3>
+    <label>Name<input name="name" required pattern="[A-Za-z0-9._\-]{1,64}" placeholder="e.g. work-laptop" autocomplete="off"></label>
+    <label>Role<select name="role" id="add-role"></select></label>
+    <p class="hint">User: chat, generate, embeddings, model list. Read-only: model list only. Admin: everything, including pulling and deleting models.</p>
+    <div class="actions"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn primary" id="add-submit" value="ok">Create device</button></div>
+  </form>
+  <div id="add-result" hidden>
+    <h3>Config for <span id="add-name"></span></h3>
+    <p class="warn-note">This is the only copy of the device's private key. Move it to the device, then run <code>ollamawg connect --config <span id="add-file"></span></code>.</p>
+    <pre id="add-config" class="cfg"></pre>
+    <div class="actions"><button class="btn" id="add-copy">Copy</button><button class="btn" id="add-download">Download</button><button class="btn primary" id="add-done">Done</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-edit">
+  <form method="dialog" id="edit-form">
+    <h3>Policy for <span id="edit-name"></span></h3>
+    <label>Role<select name="role" id="edit-role"></select></label>
+    <label>Allowed models<input name="models" placeholder="all models" autocomplete="off"></label>
+    <p class="hint">Comma-separated. <code>qwen3:*</code> allows every tag of qwen3. Leave empty to allow all.</p>
+    <label>Requests per minute<input name="rpm" type="number" min="0" step="1" placeholder="unlimited"></label>
+    <div class="actions"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn primary" value="ok">Save policy</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-confirm">
+  <form method="dialog">
+    <h3 id="confirm-title"></h3>
+    <p id="confirm-body"></p>
+    <div class="actions"><button value="cancel" class="btn ghost">Cancel</button><button value="ok" class="btn danger" id="confirm-ok"></button></div>
+  </form>
+</dialog>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="tip" class="tip" hidden></div>
+</body>
+</html>

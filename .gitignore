@@ -1,0 +1,11 @@
+# Configs hold private keys and the dashboard password. Never commit them.
+/*.yaml
+/*.yml
+/configs/
+*.jsonl
+
+# Build output
+/ollamawg
+/ollamawg.exe
+/dist/
+/node_modules/
