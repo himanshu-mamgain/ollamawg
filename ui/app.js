@@ -106,7 +106,16 @@ function nameOf(id) {
 function renderOverview() {
   const o = S.overview;
   if (!o) return;
-  $('#f-endpoint').textContent = `${o.public_endpoint || 'endpoint not set'} (udp ${o.listen_port})`;
+  const ep = $('#f-endpoint');
+  if (o.relay) {
+    // Devices dial the relay; show whether this server is registered with it.
+    ep.innerHTML = `<span class="dot" style="background:${o.relay.connected ? '#35a07a' : '#ef6a5e'}"></span>` +
+      esc(`via relay ${o.relay.address}${o.relay.connected ? '' : ' (not connected)'}`);
+    ep.title = o.relay.connected ? `Registered with the relay; last confirmed ${ago(o.relay.last_ack)}` : 'The relay is not answering: check that `ollamawg relay` is running and the token matches';
+  } else {
+    ep.textContent = `${o.public_endpoint || 'endpoint not set'} (udp ${o.listen_port})`;
+    ep.title = '';
+  }
   $('#f-tunnel').textContent = o.tunnel;
   const up = $('#f-upstream');
   up.innerHTML = `<span class="dot" style="background:${o.upstream_ok ? '#35a07a' : '#ef6a5e'}"></span>` +

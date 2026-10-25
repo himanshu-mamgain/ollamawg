@@ -100,6 +100,7 @@
       <article class="card"><h3>Phones by QR code</h3><p>Scan a QR code in the official WireGuard app. Only the server's tunnel address is routed, so the phone's other traffic is untouched.</p></article>
       <article class="card"><h3>Built-in chat page</h3><p>A mobile-friendly chat at <code>/chat</code>: streaming replies, Markdown and code blocks, a model picker, history kept on the device, and Add to Home Screen.</p></article>
       <article class="card"><h3>Dashboard 2FA</h3><p>Optionally protect the dashboard with Google Authenticator, Authy or 1Password. Choose your own username and password; it's stored as a bcrypt hash.</p></article>
+      <article class="card"><h3>Works behind CGNAT</h3><p>No public IP or port forwarding? Run <code>ollamawg relay</code> on a small cloud VM. Your server dials out to it and devices connect from anywhere. The relay can't read the traffic.</p></article>
       <article class="card"><h3>Hot reload</h3><p>Adding, blocking or editing devices applies within 2 seconds without dropping anyone's session, whether from the CLI, the dashboard or a hand edit.</p></article>
       <article class="card"><h3>Works with your tools</h3><p>The ollama CLI, Open WebUI, LangChain, Continue and any OpenAI-compatible client work unchanged through the tunnel. It's also a Go library.</p></article>
     </div>
@@ -219,7 +220,7 @@ ollamawg 2fa disable   # the way back in if you lose your phone</code></pre>
         </ul>
       </div>
       <div class="callout warn">
-        <strong>Behind CGNAT?</strong> Many home and mobile ISPs share one public IP between customers, and then no port can be forwarded to you. Your router's WAN address starts with <code>10.</code> or <code>100.64–127.</code> in that case. You can still use your LAN address as the endpoint for devices at home, ask your ISP for a public IP, or relay through a small VPS. <a href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/getting-started.md#troubleshooting">How to check</a>.
+        <strong>Behind CGNAT?</strong> Many home and mobile ISPs share one public IP between customers, and then no port can be forwarded to you. Your router's WAN address starts with <code>10.</code> or <code>100.64–127.</code> in that case. Run an <strong>ollamawg relay</strong> on any machine with a public IP, such as a free or $5 cloud VM. Your server dials out to it, so no port forwarding is needed. <a href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/relay.md">Relay guide</a> · <a href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/getting-started.md#troubleshooting">How to check for CGNAT</a>.
       </div>
     </div>
   </section>
@@ -241,6 +242,7 @@ ollamawg 2fa disable   # the way back in if you lose your phone</code></pre>
             <tr><td><code>passwd</code></td><td>server</td><td>Set your own dashboard username and password.</td></tr>
             <tr><td><code>2fa</code></td><td>server</td><td>Enable, disable or check two-factor dashboard login.</td></tr>
             <tr><td><code>firewall</code></td><td>server</td><td>Let devices through the Windows Firewall (one permission prompt).</td></tr>
+            <tr><td><code>relay</code></td><td>public VM / server</td><td>Run a relay (<code>relay init</code>, <code>relay</code>), or point the server at one (<code>relay use</code>), for servers behind CGNAT.</td></tr>
             <tr><td><code>connect</code></td><td>computer</td><td>Bring the tunnel up and expose Ollama on <code>127.0.0.1:11434</code>.</td></tr>
             <tr><td><code>status</code></td><td>computer</td><td>Check the handshake and this device's policy.</td></tr>
             <tr><td><code>keygen</code> / <code>version</code></td><td>any</td><td>Print a WireGuard key pair / the version.</td></tr>
@@ -254,7 +256,7 @@ ollamawg 2fa disable   # the way back in if you lose your phone</code></pre>
   <section id="faq" class="wrap section">
     <h2>FAQ</h2>
     <div class="faq">
-      <details><summary>Why not just use Tailscale?</summary><p>Tailscale is great at connecting machines, and it works through CGNAT, which ollamawg doesn't. ollamawg is about controlling an Ollama server you share. You get per-device roles, model allowlists, rate limits, token accounting, a request log and a built-in chat page, all self-hosted with no account or coordination server.</p></details>
+      <details><summary>Why not just use Tailscale?</summary><p>Tailscale is great at connecting machines. ollamawg is about controlling an Ollama server you share, and it handles CGNAT with its own relay that you host. You get per-device roles, model allowlists, rate limits, token accounting, a request log and a built-in chat page, all self-hosted with no account or coordination server.</p></details>
       <details><summary>Does it work with Open WebUI, LangChain, Continue…?</summary><p>Yes. On a computer running <code>ollamawg connect</code>, everything that talks to Ollama on <code>127.0.0.1:11434</code> goes through the tunnel unchanged, including OpenAI-compatible clients pointed at <code>http://127.0.0.1:11434/v1</code>.</p></details>
       <details><summary>Do I need root or admin rights?</summary><p>No, on the server or on computers. WireGuard runs in user space inside the ollamawg process. Phones use the WireGuard app, which asks once for VPN permission.</p></details>
       <details><summary>I missed the QR code. How do I get it again?</summary><p>Run <code>ollamawg reissue --name phone --qr</code>, or press <strong>New config</strong> in the dashboard. The server never keeps device private keys, so it issues a fresh one; the old config stops working.</p></details>
@@ -274,6 +276,7 @@ ollamawg 2fa disable   # the way back in if you lose your phone</code></pre>
         <a class="card link" href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/dashboard.md"><h3>Dashboard and API</h3><p>The UI, two-factor login, the admin API and Prometheus metrics.</p></a>
         <a class="card link" href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/security.md"><h3>Security model</h3><p>What is protected, how, and what is not.</p></a>
         <a class="card link" href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/deploy.md"><h3>Running as a service</h3><p>systemd, launchd, Windows, Docker and port forwarding.</p></a>
+        <a class="card link" href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/relay.md"><h3>Relay</h3><p>Connect from anywhere when the server is behind CGNAT.</p></a>
         <a class="card link" href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/library.md"><h3>Go library</h3><p>Embed the server or client in your own programs.</p></a>
       </div>
     </div>

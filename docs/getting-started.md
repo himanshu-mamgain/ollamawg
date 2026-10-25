@@ -190,7 +190,7 @@ The device appears as **Connected** on the dashboard within a few seconds. Its h
   Your options:
   - Use the server's LAN IP as `server.public_endpoint` for devices on the same network.
   - Ask your ISP for a public IP.
-  - Rent a small VPS that forwards UDP 51820 to the server.
+  - Run an ollamawg relay on a small cloud VM, so devices connect from anywhere. See [Relay](relay.md).
 
   After changing the endpoint, re-add devices, because their configs contain the old one.
 - **The endpoint in the client config is wrong.**
