@@ -301,6 +301,7 @@ function renderDevices() {
         ${policy.length ? `<div class="k" title="${esc(policy.join('; '))}">${esc(policy.join('; '))}</div>` : ''}</div>
       <div class="acts">
         <button class="btn sm" data-act="edit">Policy</button>
+        <button class="btn sm" data-act="reissue" title="New key, config and QR code for this device">New config</button>
         ${d.blocked ? '<button class="btn sm go-o" data-act="unblock">Unblock</button>' : '<button class="btn sm stop-o" data-act="block">Block</button>'}
         <button class="btn sm ghost" data-act="delete" aria-label="Delete ${esc(d.name)}">Delete</button>
       </div>
@@ -321,6 +322,15 @@ $('#devices').addEventListener('click', async ev => {
     }
   } else if (a === 'unblock') {
     act(() => api('POST', `/api/devices/${id}/unblock`), `Unblocked ${d.name}. It reconnects within about 15 seconds.`);
+  } else if (a === 'reissue') {
+    if (await confirmDialog(`New config for ${d.name}?`, `${d.name} gets a new key and you get its config and QR code again. Its current config stops working immediately; its name, address and policy stay the same.`, 'Issue new config')) {
+      try {
+        // Devices that never checked in with `ollamawg connect` are almost
+        // always phones on the WireGuard app, so open on the QR code.
+        showConfig(await api('POST', `/api/devices/${id}/reissue`), d.client && d.client.hostname ? 'computer' : 'phone');
+        refresh(true);
+      } catch (e) { toast(e.message, true); }
+    }
   } else if (a === 'delete') {
     if (await confirmDialog(`Delete ${d.name}?`, "The device's key is removed from this server. To bring it back you'd add it again and send it a new config.", 'Delete device')) {
       act(() => api('DELETE', `/api/devices/${id}`), `Deleted ${d.name}`);
@@ -361,21 +371,26 @@ $('#add-form').addEventListener('submit', async ev => {
   ev.preventDefault();
   const f = ev.target;
   try {
-    const r = await api('POST', '/api/devices', { name: f.name.value.trim(), role: f.role.value });
-    $('#add-name').textContent = r.name;
-    $('#add-file').textContent = r.filename;
-    $('#add-config').textContent = r.config;
-    $('#add-qr').src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(r.wg_qr_svg);
-    $('#add-chat').textContent = r.chat_url;
-    S.added = r;
-    addKind('computer');
-    f.hidden = true;
-    $('#add-result').hidden = false;
+    showConfig(await api('POST', '/api/devices', { name: f.name.value.trim(), role: f.role.value }), 'computer');
     refresh(true);
   } catch (e) {
     toast(e.message, true);
   }
 });
+// showConfig opens the config dialog on a device's freshly issued config
+// (from Add device or New config). It is the only copy of the private key.
+function showConfig(r, kind) {
+  $('#add-name').textContent = r.name;
+  $('#add-file').textContent = r.filename;
+  $('#add-config').textContent = r.config;
+  $('#add-qr').src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(r.wg_qr_svg);
+  $('#add-chat').textContent = r.chat_url;
+  S.added = r;
+  addKind(kind);
+  $('#add-form').hidden = true;
+  $('#add-result').hidden = false;
+  if (!$('#dlg-add').open) $('#dlg-add').showModal();
+}
 // Computer: YAML for `ollamawg connect`. Phone: wg-quick config (QR, or
 // the .conf file) for the official WireGuard app.
 function addKind(kind) {

@@ -111,6 +111,21 @@ func (s *Server) AddDevice(name, role string) (*ClientConfig, error) {
 	return cc, err
 }
 
+// ReissueDevice gives a device a new key and returns its new client config.
+// Its old key is dropped from WireGuard immediately.
+func (s *Server) ReissueDevice(ref string) (*ClientConfig, error) {
+	var cc *ClientConfig
+	err := s.edit(func(c *ServerConfig) error {
+		var err error
+		cc, err = c.ReissuePeer(ref)
+		return err
+	})
+	if err == nil {
+		s.obs.Event("admin", "warn", fmt.Sprintf("device %s re-issued: new key, the old config no longer works", cc.Client.Name), "", cc.Client.PrivateKey.PublicKey().DeviceID())
+	}
+	return cc, err
+}
+
 func roleOr(r string) string {
 	if r == "" {
 		return "user"
@@ -193,6 +208,7 @@ func (s *Server) adminHandler() http.Handler {
 	mux.HandleFunc("PATCH /api/devices/{id}", a.patchDevice)
 	mux.HandleFunc("POST /api/devices/{id}/block", func(w http.ResponseWriter, r *http.Request) { a.block(w, r, true) })
 	mux.HandleFunc("POST /api/devices/{id}/unblock", func(w http.ResponseWriter, r *http.Request) { a.block(w, r, false) })
+	mux.HandleFunc("POST /api/devices/{id}/reissue", a.reissueDevice)
 	mux.HandleFunc("DELETE /api/devices/{id}", a.deleteDevice)
 	mux.HandleFunc("GET /api/sources", func(w http.ResponseWriter, r *http.Request) { a.sources(w, r) })
 	mux.HandleFunc("GET /api/firewall", a.firewall)
@@ -346,15 +362,30 @@ func (a *adminCtx) addDevice(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 400, err.Error())
 		return
 	}
+	writeJSON(w, 201, configResponse(cc))
+}
+
+// POST /api/devices/{id}/reissue: a new key and config for an existing device.
+func (a *adminCtx) reissueDevice(w http.ResponseWriter, r *http.Request) {
+	cc, err := a.s.ReissueDevice(r.PathValue("id"))
+	if err != nil {
+		writeJSONError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, configResponse(cc))
+}
+
+// configResponse is a device's config in every form the dashboard offers:
+// YAML for `ollamawg connect`, and wg-quick text plus QR for the WireGuard app.
+func configResponse(cc *ClientConfig) map[string]any {
 	y, _ := cc.Marshal()
-	wg := cc.WireGuardConf()
 	qr, _ := QRSVG(cc.WireGuardQRText())
-	writeJSON(w, 201, map[string]any{
+	return map[string]any{
 		"device_id": cc.Client.PrivateKey.PublicKey().DeviceID(), "name": cc.Client.Name,
 		"address": cc.Client.Address, "filename": cc.Client.Name + ".yaml", "config": string(y),
-		"wg_filename": cc.Client.Name + ".conf", "wg_config": wg, "wg_qr_svg": qr,
+		"wg_filename": cc.Client.Name + ".conf", "wg_config": cc.WireGuardConf(), "wg_qr_svg": qr,
 		"chat_url": fmt.Sprintf("http://%s:%d/chat", cc.Client.ServerAddress, cc.Client.ServerPort),
-	})
+	}
 }
 
 func (a *adminCtx) patchDevice(w http.ResponseWriter, r *http.Request) {

@@ -434,7 +434,7 @@ func (c *ServerConfig) AddPeer(name, role string) (*ClientConfig, error) {
 		return nil, fmt.Errorf("invalid name %q: use letters, digits, '-', '_' or '.'", name)
 	}
 	if c.FindPeer(name) >= 0 {
-		return nil, fmt.Errorf("peer %q already exists", name)
+		return nil, fmt.Errorf("peer %q already exists; to give it a new config (and QR code), run: ollamawg reissue --name %s", name, name)
 	}
 	if _, ok := c.Role(role); !ok {
 		return nil, fmt.Errorf("unknown role %q", role)
@@ -454,15 +454,45 @@ func (c *ServerConfig) AddPeer(name, role string) (*ClientConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	pfx, _ := c.ServerPrefix()
 	c.Peers = append(c.Peers, PeerConfig{
 		Name: name, PublicKey: priv.PublicKey(), PresharedKey: psk,
 		Address: addr.String(), Role: role, Created: time.Now().UTC().Truncate(time.Second),
 	})
+	return c.clientConfig(name, addr.String(), priv, psk), nil
+}
+
+// ReissuePeer gives an existing device a fresh key pair and preshared key,
+// keeping its name, address, role, model allowlist, rate limit and block
+// state. The old key stops working as soon as the config is applied. The
+// server never stores device private keys, so this is how to get a device's
+// config or QR code again (lost file, QR never scanned, new phone).
+func (c *ServerConfig) ReissuePeer(ref string) (*ClientConfig, error) {
+	i := c.FindPeer(ref)
+	if i < 0 {
+		return nil, fmt.Errorf("no device %q", ref)
+	}
+	if c.Server.PublicEndpoint == "" {
+		return nil, errors.New("server.public_endpoint is empty; set it to the host:port clients will reach")
+	}
+	priv, err := GeneratePrivateKey()
+	if err != nil {
+		return nil, err
+	}
+	psk, err := GeneratePresharedKey()
+	if err != nil {
+		return nil, err
+	}
+	p := &c.Peers[i]
+	p.PublicKey, p.PresharedKey = priv.PublicKey(), psk
+	return c.clientConfig(p.Name, p.Address, priv, psk), nil
+}
+
+func (c *ServerConfig) clientConfig(name, addr string, priv, psk Key) *ClientConfig {
+	pfx, _ := c.ServerPrefix()
 	return &ClientConfig{Client: ClientSection{
 		Name:            name,
 		PrivateKey:      priv,
-		Address:         addr.String(),
+		Address:         addr,
 		ServerPublicKey: c.Server.PrivateKey.PublicKey(),
 		PresharedKey:    psk,
 		Endpoint:        c.Server.PublicEndpoint,
@@ -471,7 +501,7 @@ func (c *ServerConfig) AddPeer(name, role string) (*ClientConfig, error) {
 		Listen:          DefaultClientListen,
 		Keepalive:       DefaultKeepalive,
 		MTU:             c.Server.MTU,
-	}}, nil
+	}}
 }
 
 // Validate checks a client config.

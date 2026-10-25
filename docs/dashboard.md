@@ -42,6 +42,7 @@ Turning 2FA on also creates an API token (`admin.api_token` in `server.yaml`, al
 - **Activity:** a sparkline of requests over the last hour, plus requests, tokens and denials over 24 hours.
 - **Actions:**
   - **Policy:** change the role, model allowlist and requests per minute.
+  - **New config:** gives the device a new key and shows its config and QR code again, for example if the QR code was never scanned or the file was lost. The old config stops working, and the name, address and policy stay.
   - **Block / Unblock:** cuts the session immediately and refuses handshakes. Unblocked devices reconnect within about 15 seconds.
   - **Delete:** removes the key. The device needs a new config to come back.
 
@@ -82,6 +83,7 @@ Wherever an endpoint takes `{id}`, you can pass the device name, its device ID, 
 | `PATCH /api/devices/{id}` | `{"role":"admin","models":["llama3.2"],"rpm":60}` (all optional) | `{"status":"ok"}` |
 | `POST /api/devices/{id}/block` | | `{"status":"ok"}` |
 | `POST /api/devices/{id}/unblock` | | `{"status":"ok"}` |
+| `POST /api/devices/{id}/reissue` | | A new key for the device; same response as `POST /api/devices`. The old config stops working. |
 | `DELETE /api/devices/{id}` | | `{"status":"ok"}` |
 | `GET /api/sources` | `?limit=500` | UDP sources: `ip`, `port`, `packets`, `bytes`, `dropped`, `first_seen`, `last_seen`, `device`, `device_id`, `rule`, `blocked` |
 | `GET /api/firewall` | | `{"default","rules":[{action,cidr,note,added,hits}],"packets_passed","packets_dropped"}` |

@@ -37,6 +37,7 @@ const usage = `ollamawg %s - secure Ollama over WireGuard (userspace, no root ne
 Server (the machine running Ollama):
   init         create server.yaml with fresh keys and a dashboard password
   add-peer     register a device and write its client config
+  reissue      give a device a new key and config (or QR code), e.g. if it was lost
   remove-peer  delete a device; its key can no longer connect
   list-peers   show devices
   block        block a device (--device) or an IP/CIDR (--ip)
@@ -62,7 +63,7 @@ func main() {
 		os.Exit(2)
 	}
 	cmds := map[string]func([]string) error{
-		"init": cmdInit, "add-peer": cmdAddPeer, "remove-peer": cmdRemovePeer, "list-peers": cmdListPeers,
+		"init": cmdInit, "add-peer": cmdAddPeer, "reissue": cmdReissue, "remove-peer": cmdRemovePeer, "list-peers": cmdListPeers,
 		"block": func(a []string) error { return cmdBlock(a, true) }, "unblock": func(a []string) error { return cmdBlock(a, false) },
 		"serve": cmdServe, "passwd": cmdPasswd, "2fa": cmd2FA, "connect": cmdConnect, "status": cmdStatus, "keygen": cmdKeygen,
 		"version": func([]string) error { fmt.Println(ollamawg.Version); return nil },
@@ -199,37 +200,77 @@ func cmdAddPeer(args []string) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
-	if *qr {
-		code, err := terminalQR(cc.WireGuardQRText(), 1)
+	return deliverConfig(cfg, *path, cc, *p, "Added", *qr, *out, false)
+}
+
+func cmdReissue(args []string) error {
+	fs := newFlags("reissue")
+	path := fs.String("config", "server.yaml", "server config file")
+	name := fs.String("name", "", "device name, device id or public key (required)")
+	out := fs.String("out", "", "client config to write (default <name>.yaml; an old one is replaced)")
+	qr := fs.Bool("qr", false, "for phones: print a QR code to scan in the WireGuard app instead of writing a config file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *name == "" {
+		return errors.New("--name is required")
+	}
+	if *qr && *out != "" {
+		return errors.New("--qr prints the config instead of writing it; drop --out")
+	}
+	cfg, err := ollamawg.LoadServerConfig(*path)
+	if err != nil {
+		return err
+	}
+	cc, err := cfg.ReissuePeer(*name)
+	if err != nil {
+		return err
+	}
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	return deliverConfig(cfg, *path, cc, cfg.Peers[cfg.FindPeer(cc.Client.Name)], "Re-issued", *qr, *out, true)
+}
+
+// deliverConfig saves the server config and hands over the device's client
+// config: as a QR code for the WireGuard app, or as a YAML file for
+// `ollamawg connect`. It is the only copy of the device's private key.
+func deliverConfig(cfg *ollamawg.ServerConfig, path string, cc *ollamawg.ClientConfig, p ollamawg.PeerConfig, verb string, qr bool, out string, replace bool) error {
+	note := ""
+	if replace {
+		note = " Its old config no longer works."
+	}
+	if qr {
+		code, err := terminalQR(cc.WireGuardQRText(), 3)
 		if err != nil {
 			return err
 		}
-		if err := cfg.Save(*path); err != nil {
+		if err := cfg.Save(path); err != nil {
 			return err
 		}
 		// Text first, QR last: then the code sits at the bottom of the window
 		// and isn't scrolled out of view by lines printed after it.
-		fmt.Printf("Added %s: device id %s, address %s, role %s. A running server picks this up automatically.\n", *name, p.PublicKey.DeviceID(), p.Address, p.Role)
+		fmt.Printf("%s %s: device id %s, address %s, role %s.%s A running server picks this up automatically.\n", verb, p.Name, p.PublicKey.DeviceID(), p.Address, p.Role, note)
 		fmt.Printf("With the tunnel on, open http://%s:%d/chat on the phone, or point any Ollama app at http://%s:%d.\n",
 			cc.Client.ServerAddress, cc.Client.ServerPort, cc.Client.ServerAddress, cc.Client.ServerPort)
-		fmt.Println("In the WireGuard app: + > Create from QR code, and scan this. It is the only copy of the device's key:")
+		fmt.Printf("In the WireGuard app: + > Create from QR code, and scan this. Missed it? Run: ollamawg reissue --name %s --qr\n", p.Name)
 		fmt.Print(code)
 		return nil
 	}
-	if *out == "" {
-		*out = filepath.Join(filepath.Dir(*path), *name+".yaml")
+	if out == "" {
+		out = filepath.Join(filepath.Dir(path), p.Name+".yaml")
 	}
-	if _, err := os.Stat(*out); err == nil {
-		return fmt.Errorf("%s already exists", *out)
+	if _, err := os.Stat(out); err == nil && !replace {
+		return fmt.Errorf("%s already exists", out)
 	}
-	if err := cc.Save(*out); err != nil {
+	if err := cc.Save(out); err != nil {
 		return err
 	}
-	if err := cfg.Save(*path); err != nil {
+	if err := cfg.Save(path); err != nil {
 		return err
 	}
-	fmt.Printf("Added %s: device id %s, address %s, role %s\n", *name, p.PublicKey.DeviceID(), p.Address, p.Role)
-	fmt.Printf("Client config: %s  (contains the device's private key; copy it securely, then delete it here)\n", *out)
+	fmt.Printf("%s %s: device id %s, address %s, role %s.%s\n", verb, p.Name, p.PublicKey.DeviceID(), p.Address, p.Role, note)
+	fmt.Printf("Client config: %s  (contains the device's private key; copy it securely, then delete it here)\n", out)
 	fmt.Println("A running server picks this up automatically.")
 	return nil
 }

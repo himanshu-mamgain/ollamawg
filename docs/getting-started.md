@@ -150,7 +150,7 @@ The built-in chat page also works here: open `http://127.0.0.1:11434/chat`.
 Phones use the official **WireGuard** app (App Store, Google Play) instead of `ollamawg connect`. The server is a standard WireGuard peer, so nothing else is needed.
 
 1. Add the device with `ollamawg add-peer --name phone --qr`, or in the dashboard with **Add device** then **Phone**.
-2. In the WireGuard app, tap **+**, then **Create from QR code**, and scan it. The QR code is the only copy of the phone's private key.
+2. In the WireGuard app, tap **+**, then **Create from QR code**, and scan it. The QR code is the only copy of the phone's private key. If you miss it, run `ollamawg reissue --name phone --qr`, or press **New config** on the device in the dashboard, to get a fresh one.
 3. Turn the tunnel on. Only the server's tunnel address is routed through it, so the rest of the phone's traffic is unaffected.
 4. Open **`http://10.77.0.1:11434/chat`** in the phone's browser. This is a ChatGPT-style chat page served by ollamawg. Use **Share → Add to Home Screen** to open it like an app.
 

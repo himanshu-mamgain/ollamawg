@@ -95,6 +95,8 @@ You can also use **Add device** in the dashboard, then **Phone**.
 
 Ollama apps such as Enchanted or Reins work too: point them at `http://10.77.0.1:11434`.
 
+**Missed the QR code, lost a config, or got a new phone?** The server never stores device private keys, so a config can't be shown twice. Issue a new one instead: `ollamawg reissue --name phone --qr`, or **New config** on the device in the dashboard. The device keeps its name, address and policy, and the old config stops working.
+
 <img src="docs/images/chat.png" alt="The chat page on a phone" width="300">
 
 <sub>Chat page on a phone, with a simulated model reply.</sub>
@@ -164,6 +166,7 @@ See [Dashboard and admin API](docs/dashboard.md).
 Server
   init         create server.yaml with keys and a dashboard password
   add-peer     register a device; --qr prints a QR code for the WireGuard app
+  reissue      new key and config (or --qr) for an existing device
   remove-peer  delete a device
   list-peers   show devices and rules
   block        block --device or --ip
