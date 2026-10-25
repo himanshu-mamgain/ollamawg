@@ -28,7 +28,8 @@
 <section id="login" class="login" hidden>
   <form id="login-form" class="login-card">
     <h2>ollamawg dashboard</h2>
-    <p class="hint">Two-factor login is on. Enter the dashboard password and the 6-digit code from your authenticator app.</p>
+    <p class="hint">Two-factor login is on. Enter your dashboard username and password, and the 6-digit code from your authenticator app.</p>
+    <label>Username<input name="user" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>
     <label>Password<input name="password" type="password" required autocomplete="current-password"></label>
     <label>Code<input name="code" required inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" autocomplete="one-time-code" placeholder="123 456"></label>
     <p class="login-err" id="login-err" role="alert"></p>

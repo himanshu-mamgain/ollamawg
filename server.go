@@ -29,7 +29,7 @@ import (
 )
 
 // Version of ollamawg.
-var Version = "0.2.2"
+var Version = "0.3.0"
 
 // onlineWindow is how recent a handshake must be for a device to count as
 // connected. WireGuard rejects sessions older than 180 s, and clients with a
@@ -263,7 +263,7 @@ func (s *Server) Run(ctx context.Context) error {
 	go func() { errc <- proxySrv.Serve(ln) }()
 
 	var adminSrv *http.Server
-	if cfg.Admin.Password != "" {
+	if cfg.Admin.Enabled() {
 		aln, err := net.Listen("tcp", cfg.Admin.Listen)
 		if err != nil {
 			return fmt.Errorf("admin listener: %w", err)
@@ -271,7 +271,7 @@ func (s *Server) Run(ctx context.Context) error {
 		s.admin = aln.Addr().String()
 		adminSrv = &http.Server{Handler: s.adminHandler(), ReadHeaderTimeout: 10 * time.Second}
 		go func() { errc <- adminSrv.Serve(aln) }()
-		s.log.Info("dashboard listening", "url", "http://"+aln.Addr().String(), "user", "admin")
+		s.log.Info("dashboard listening", "url", "http://"+aln.Addr().String(), "user", cfg.Admin.Username())
 	}
 
 	s.started = time.Now()

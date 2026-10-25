@@ -242,7 +242,7 @@ func (a *adminCtx) guard(next http.Handler) http.Handler {
 		// before there is a session. They hold no secrets.
 		public := r.URL.Path == "/api/session" || r.URL.Path == "/api/login" || r.URL.Path == "/api/logout" ||
 			(c.totpSecret != "" && r.Method == http.MethodGet && !strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/metrics")
-		if c.password == "" || (!ok && !public) {
+		if !c.enabled() || (!ok && !public) {
 			if badBasic && a.failLim.Allow() {
 				a.s.obs.Event("admin", "warn", "dashboard login failed from "+r.RemoteAddr, hostOnly(r.RemoteAddr), "")
 			}

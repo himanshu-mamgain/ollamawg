@@ -1,6 +1,6 @@
 {
   "name": "@ollamawg/cli",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Reach your Ollama server from anywhere through a user-space WireGuard tunnel, with per-device access control and a dashboard.",
   "keywords": ["ollama", "wireguard", "tunnel", "llm", "proxy", "vpn"],
   "homepage": "https://github.com/himanshu-mamgain/ollamawg#readme",
@@ -19,11 +19,11 @@
     "node": ">=16"
   },
   "optionalDependencies": {
-    "@ollamawg/darwin-arm64": "0.2.2",
-    "@ollamawg/darwin-x64": "0.2.2",
-    "@ollamawg/freebsd-x64": "0.2.2",
-    "@ollamawg/linux-arm64": "0.2.2",
-    "@ollamawg/linux-x64": "0.2.2",
-    "@ollamawg/win32-x64": "0.2.2"
+    "@ollamawg/darwin-arm64": "0.3.0",
+    "@ollamawg/darwin-x64": "0.3.0",
+    "@ollamawg/freebsd-x64": "0.3.0",
+    "@ollamawg/linux-arm64": "0.3.0",
+    "@ollamawg/linux-x64": "0.3.0",
+    "@ollamawg/win32-x64": "0.3.0"
   }
 }

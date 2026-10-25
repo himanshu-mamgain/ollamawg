@@ -45,7 +45,7 @@ Ollama servers left open on the internet are routinely found and abused.
 The dashboard can create devices and lift blocks, so it is treated as privileged:
 
 - It listens on `127.0.0.1:8088` by default. Reach it remotely through SSH (`ssh -L 8088:127.0.0.1:8088 host`) or over the tunnel host's own admin access. Don't expose it publicly.
-- It uses HTTP basic auth with a random 24-character password generated at `init`, compared in constant time. Failed logins are slowed and logged as security events.
+- It uses HTTP basic auth. `init` generates a random 24-character password, compared in constant time. A password you choose with `ollamawg passwd` is stored only as a bcrypt hash. Failed logins are slowed and logged as security events.
 - **Two-factor login** is optional: turn it on from the dashboard's **2FA** button or with `ollamawg 2fa enable`. The dashboard then needs the password plus a code from an authenticator app (standard TOTP, RFC 6238), and basic auth is refused.
   - A successful login sets an `HttpOnly`, `SameSite=Strict` session cookie that lasts 12 hours. Sessions live in memory, so they end when the server restarts or the authenticator is re-enrolled.
   - Codes are accepted one step either side of now, for clock drift, and each code works once.
@@ -80,7 +80,7 @@ Basic auth or a session cookie over plain HTTP is fine on loopback or an SSH tun
 - **Rate limits are per device and in memory.** They reset on restart and are not a quota system.
 - **Token counts are read from Ollama's responses.** Prompts and outputs are never logged. The access log records metadata only: device, IP, path, model, status, timing and token counts.
 - **`connect --listen 0.0.0.0:...` shares the device's tunnel with its LAN,** and everyone there then acts as that device. The default is loopback only.
-- **The dashboard is not multi-user.** There is one admin password. Put a reverse proxy with SSO in front if several people need it.
+- **The dashboard is not multi-user.** There is one admin account. Put a reverse proxy with SSO in front if several people need it.
 - **This project has not had an independent security audit.** The cryptography comes from wireguard-go and gVisor, which are widely deployed. The policy layer is small, covered by end-to-end tests, and worth reading before you rely on it.
 
 ## Reporting issues

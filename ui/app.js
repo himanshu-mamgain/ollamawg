@@ -589,7 +589,7 @@ function showLogin() {
   document.body.classList.add('locked');
   $('#login').hidden = false;
   $('#login-err').textContent = '';
-  $('#login-form').password.focus();
+  $('#login-form').user.focus();
 }
 function unlock() {
   S.locked = false;
@@ -604,7 +604,7 @@ $('#login-form').addEventListener('submit', async ev => {
   const f = ev.target;
   $('#login-submit').disabled = true;
   try {
-    await api('POST', '/api/login', { password: f.password.value, code: digits(f.code.value) });
+    await api('POST', '/api/login', { user: f.user.value.trim(), password: f.password.value, code: digits(f.code.value) });
     unlock();
   } catch (e) {
     $('#login-err').textContent = e.message;

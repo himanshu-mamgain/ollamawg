@@ -115,14 +115,14 @@ func TestTwoFactorLogin(t *testing.T) {
 
 	jar, _ := cookiejar.New(nil)
 	browser := &http.Client{Jar: jar}
-	if c, _, _ := do(browser, "POST", "/api/login", map[string]string{"password": h.pass, "code": "000000"}, nil); c != 401 {
+	if c, _, _ := do(browser, "POST", "/api/login", map[string]string{"user": "admin", "password": h.pass, "code": "000000"}, nil); c != 401 {
 		t.Fatalf("wrong code: want 401, got %d", c)
 	}
 	now := code(setup.Secret, 0)
-	if c, b, _ := do(browser, "POST", "/api/login", map[string]string{"password": h.pass, "code": now}, nil); c != 200 {
+	if c, b, _ := do(browser, "POST", "/api/login", map[string]string{"user": "admin", "password": h.pass, "code": now}, nil); c != 200 {
 		t.Fatalf("login: %d %s", c, b)
 	}
-	if c, _, _ := do(&http.Client{}, "POST", "/api/login", map[string]string{"password": h.pass, "code": now}, nil); c != 401 {
+	if c, _, _ := do(&http.Client{}, "POST", "/api/login", map[string]string{"user": "admin", "password": h.pass, "code": now}, nil); c != 401 {
 		t.Fatalf("replayed code: want 401, got %d", c)
 	}
 	if c, b, _ := do(browser, "GET", "/api/devices", nil, nil); c != 200 {

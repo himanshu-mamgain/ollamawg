@@ -1,6 +1,6 @@
 # Dashboard and admin API
 
-`ollamawg serve` starts a dashboard on the server at `http://127.0.0.1:8088`. The username is `admin` and the password is `admin.password` in `server.yaml`. It refreshes every 3 seconds and works offline, because everything is embedded in the binary.
+`ollamawg serve` starts a dashboard on the server at `http://127.0.0.1:8088`. Log in with the username and password from `init`, `admin` and the generated `admin.password` in `server.yaml`, unless you set your own with `ollamawg passwd`. It refreshes every 3 seconds and works offline, because everything is embedded in the binary.
 
 To open it from another machine without exposing it:
 
@@ -65,7 +65,7 @@ Turning 2FA on also creates an API token (`admin.api_token` in `server.yaml`, al
 The dashboard is a thin client over a JSON API on the same address. Every endpoint needs authentication: basic auth, or with 2FA on, the API token as a bearer token. `admin.api_token` also works without 2FA once it is set. Requests that change state (`POST`, `PATCH`, `PUT`, `DELETE`) also need the header `X-Ollamawg: 1`.
 
 ```sh
-A="-u admin:$PASS -H X-Ollamawg:1"                               # without 2FA
+A="-u $DASH_USER:$DASH_PASS -H X-Ollamawg:1"                     # without 2FA
 A="-H 'Authorization: Bearer $TOKEN' -H X-Ollamawg:1"            # with 2FA
 curl -s $A http://127.0.0.1:8088/api/devices | jq
 curl -s $A -X POST http://127.0.0.1:8088/api/devices/laptop/block
@@ -122,7 +122,7 @@ Errors come back as `{"error": "message"}` with a 4xx status.
 scrape_configs:
   - job_name: ollamawg
     static_configs: [{targets: ["127.0.0.1:8088"]}]
-    basic_auth: {username: admin, password_file: /etc/prometheus/ollamawg.pass}
+    basic_auth: {username: admin, password_file: /etc/prometheus/ollamawg.pass}   # your admin.user
     # with 2FA on, use the API token instead of basic_auth:
     # authorization: {credentials_file: /etc/prometheus/ollamawg.token}
 ```

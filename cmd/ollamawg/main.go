@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/himanshu-mamgain/ollamawg"
+	"golang.org/x/term"
 )
 
 const usage = `ollamawg %s - secure Ollama over WireGuard (userspace, no root needed)
@@ -41,6 +42,7 @@ Server (the machine running Ollama):
   block        block a device (--device) or an IP/CIDR (--ip)
   unblock      undo a block
   serve        run the tunnel, the Ollama proxy and the dashboard
+  passwd       set your own dashboard username and password
   2fa          enable, disable or check two-factor login for the dashboard
 
 Client (each device):
@@ -62,7 +64,7 @@ func main() {
 	cmds := map[string]func([]string) error{
 		"init": cmdInit, "add-peer": cmdAddPeer, "remove-peer": cmdRemovePeer, "list-peers": cmdListPeers,
 		"block": func(a []string) error { return cmdBlock(a, true) }, "unblock": func(a []string) error { return cmdBlock(a, false) },
-		"serve": cmdServe, "2fa": cmd2FA, "connect": cmdConnect, "status": cmdStatus, "keygen": cmdKeygen,
+		"serve": cmdServe, "passwd": cmdPasswd, "2fa": cmd2FA, "connect": cmdConnect, "status": cmdStatus, "keygen": cmdKeygen,
 		"version": func([]string) error { fmt.Println(ollamawg.Version); return nil },
 	}
 	name := os.Args[1]
@@ -109,11 +111,16 @@ func cmdInit(args []string) error {
 	upstream := fs.String("upstream", ollamawg.DefaultUpstream, "Ollama URL on this machine")
 	admin := fs.String("admin", ollamawg.DefaultAdminListen, "dashboard listen address (keep it on loopback)")
 	force := fs.Bool("force", false, "overwrite an existing config")
+	user := fs.String("user", "admin", "dashboard username")
+	setPass := fs.Bool("set-password", false, "choose the dashboard password (asked twice) instead of generating one")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *endpoint == "" {
 		return errors.New("--endpoint is required, e.g. --endpoint vpn.example.com:51820 (or your public IP)")
+	}
+	if !ollamawg.ValidUser(*user) {
+		return fmt.Errorf("--user %q: use letters, digits, '-', '_', '.' or '@'", *user)
 	}
 	if _, err := os.Stat(*path); err == nil && !*force {
 		return fmt.Errorf("%s already exists (use --force to overwrite; this rotates all keys)", *path)
@@ -124,6 +131,18 @@ func cmdInit(args []string) error {
 	}
 	cfg.Server.Upstream = *upstream
 	cfg.Admin.Listen = *admin
+	if *user != "admin" {
+		cfg.Admin.User = *user
+	}
+	if *setPass {
+		pw, err := promptNewPassword(false)
+		if err != nil {
+			return err
+		}
+		if err := cfg.Admin.SetPassword(pw); err != nil {
+			return err
+		}
+	}
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
@@ -134,7 +153,12 @@ func cmdInit(args []string) error {
 	fmt.Printf("  server public key  %s\n", cfg.Server.PrivateKey.PublicKey())
 	fmt.Printf("  wireguard          udp/%d  (open this port in your firewall/router)\n", cfg.Server.ListenPort)
 	fmt.Printf("  tunnel address     %s\n", cfg.Server.Address)
-	fmt.Printf("  dashboard          http://%s  user: admin  password: %s\n\n", cfg.Admin.Listen, cfg.Admin.Password)
+	if *setPass {
+		fmt.Printf("  dashboard          http://%s  user: %s  password: the one you chose\n\n", cfg.Admin.Listen, cfg.Admin.Username())
+	} else {
+		fmt.Printf("  dashboard          http://%s  user: %s  password: %s\n", cfg.Admin.Listen, cfg.Admin.Username(), cfg.Admin.Password)
+		fmt.Printf("                     (choose your own with: ollamawg passwd --config %s)\n\n", *path)
+	}
 	fmt.Printf("Next: ollamawg add-peer --config %s --name <device>\n", *path)
 	return nil
 }
@@ -176,20 +200,20 @@ func cmdAddPeer(args []string) error {
 		return err
 	}
 	if *qr {
-		code, err := ollamawg.QRTerminal(cc.WireGuardQRText())
+		code, err := terminalQR(cc.WireGuardQRText(), 1)
 		if err != nil {
 			return err
 		}
 		if err := cfg.Save(*path); err != nil {
 			return err
 		}
-		fmt.Printf("Added %s: device id %s, address %s, role %s\n\n", *name, p.PublicKey.DeviceID(), p.Address, p.Role)
-		fmt.Println("In the WireGuard app: + > Create from QR code, and scan this. It is the only copy of the device's key.")
-		fmt.Println()
+		// Text first, QR last: then the code sits at the bottom of the window
+		// and isn't scrolled out of view by lines printed after it.
+		fmt.Printf("Added %s: device id %s, address %s, role %s. A running server picks this up automatically.\n", *name, p.PublicKey.DeviceID(), p.Address, p.Role)
+		fmt.Printf("With the tunnel on, open http://%s:%d/chat on the phone, or point any Ollama app at http://%s:%d.\n",
+			cc.Client.ServerAddress, cc.Client.ServerPort, cc.Client.ServerAddress, cc.Client.ServerPort)
+		fmt.Println("In the WireGuard app: + > Create from QR code, and scan this. It is the only copy of the device's key:")
 		fmt.Print(code)
-		fmt.Printf("\nWith the tunnel on, open http://%s:%d/chat on the phone to chat,\n", cc.Client.ServerAddress, cc.Client.ServerPort)
-		fmt.Printf("or point any Ollama app at http://%s:%d.\n", cc.Client.ServerAddress, cc.Client.ServerPort)
-		fmt.Println("A running server picks this up automatically.")
 		return nil
 	}
 	if *out == "" {
@@ -522,7 +546,7 @@ func cmd2FA(args []string) error {
 		}
 		secret := ollamawg.NewTOTPSecret()
 		uri := ollamawg.TOTPURI(secret, ollamawg.TOTPAccount())
-		qr, err := ollamawg.QRTerminal(uri)
+		qr, err := terminalQR(uri, 2)
 		if err != nil {
 			return err
 		}
@@ -560,4 +584,94 @@ func cmd2FA(args []string) error {
 	}
 	fmt.Fprint(os.Stderr, usage2FA)
 	return fmt.Errorf("unknown 2fa command %q", sub)
+}
+
+func cmdPasswd(args []string) error {
+	fs := newFlags("passwd")
+	path := fs.String("config", "server.yaml", "server config file")
+	user := fs.String("user", "", "new dashboard username (default: keep the current one)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *user != "" && !ollamawg.ValidUser(*user) {
+		return fmt.Errorf("--user %q: use letters, digits, '-', '_', '.' or '@'", *user)
+	}
+	cfg, err := ollamawg.LoadServerConfig(*path)
+	if err != nil {
+		return err
+	}
+	// With a new username, an empty password keeps the current one.
+	pw, err := promptNewPassword(*user != "")
+	if err != nil {
+		return err
+	}
+	if pw != "" {
+		if err := cfg.Admin.SetPassword(pw); err != nil {
+			return err
+		}
+	}
+	if *user != "" {
+		cfg.Admin.User = *user
+		if *user == "admin" {
+			cfg.Admin.User = ""
+		}
+	}
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	if err := cfg.Save(*path); err != nil {
+		return err
+	}
+	fmt.Printf("Saved. Dashboard login: user %s", cfg.Admin.Username())
+	if pw != "" {
+		fmt.Print(", password stored as a bcrypt hash")
+	}
+	fmt.Println(".")
+	fmt.Println("A running server picks this up automatically; your browser will ask you to log in again.")
+	return nil
+}
+
+// promptNewPassword asks for a password twice without echoing it. When stdin
+// is not a terminal it reads one line, so the password can be piped in.
+func promptNewPassword(allowEmpty bool) (string, error) {
+	fd := int(os.Stdin.Fd())
+	if !term.IsTerminal(fd) {
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil && line == "" {
+			return "", errors.New("no password on stdin")
+		}
+		return strings.TrimRight(line, "\r\n"), nil
+	}
+	prompt := fmt.Sprintf("New dashboard password (at least %d characters): ", ollamawg.MinPasswordLength)
+	if allowEmpty {
+		prompt = "New dashboard password (Enter to keep the current one): "
+	}
+	for attempt := 1; ; attempt++ {
+		fmt.Print(prompt)
+		a, err := term.ReadPassword(fd)
+		fmt.Println()
+		if err != nil {
+			return "", err
+		}
+		if len(a) == 0 && allowEmpty {
+			return "", nil
+		}
+		if len(a) < ollamawg.MinPasswordLength {
+			fmt.Printf("Too short: use at least %d characters.\n", ollamawg.MinPasswordLength)
+		} else {
+			fmt.Print("Repeat it: ")
+			b, err := term.ReadPassword(fd)
+			fmt.Println()
+			if err != nil {
+				return "", err
+			}
+			if string(a) == string(b) {
+				return string(a), nil
+			}
+			fmt.Println("The two passwords don't match.")
+		}
+		if attempt == 3 {
+			return "", errors.New("password not changed")
+		}
+	}
 }

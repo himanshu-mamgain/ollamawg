@@ -1,6 +1,7 @@
 package ollamawg
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/time/rate"
 )
 
@@ -34,19 +36,47 @@ type adminAuth struct {
 	usedFor  string
 	// loginLim throttles failed password/code attempts across all clients.
 	loginLim *rate.Limiter
+	// okDigest remembers the last password that matched passwordHash, so the
+	// dashboard's polling doesn't pay for a bcrypt comparison every request.
+	okDigest [32]byte
+	okHash   string
 }
 
 func newAdminAuth() *adminAuth {
 	return &adminAuth{sessions: map[string]session{}, loginLim: rate.NewLimiter(rate.Every(10*time.Second), 10)}
 }
 
-type authCreds struct{ password, totpSecret, apiToken string }
+type authCreds struct{ user, password, passwordHash, totpSecret, apiToken string }
+
+func (c authCreds) enabled() bool { return c.password != "" || c.passwordHash != "" }
 
 func (a *adminCtx) creds() authCreds {
 	a.s.mu.RLock()
 	defer a.s.mu.RUnlock()
 	c := a.s.cfg.Admin
-	return authCreds{c.Password, c.TOTPSecret, c.APIToken}
+	return authCreds{c.Username(), c.Password, c.PasswordHash, c.TOTPSecret, c.APIToken}
+}
+
+// checkLogin verifies a username and password against the config.
+func (a *adminCtx) checkLogin(c authCreds, user, pw string) bool {
+	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(c.user)) == 1
+	if c.passwordHash == "" {
+		passOK := subtle.ConstantTimeCompare([]byte(pw), []byte(c.password)) == 1
+		return userOK && passOK && c.password != ""
+	}
+	d := sha256.Sum256([]byte(c.passwordHash + "\x00" + pw))
+	a.auth.mu.Lock()
+	cached := a.auth.okHash == c.passwordHash && subtle.ConstantTimeCompare(d[:], a.auth.okDigest[:]) == 1
+	a.auth.mu.Unlock()
+	if !cached {
+		if bcrypt.CompareHashAndPassword([]byte(c.passwordHash), []byte(pw)) != nil {
+			return false
+		}
+		a.auth.mu.Lock()
+		a.auth.okDigest, a.auth.okHash = d, c.passwordHash
+		a.auth.mu.Unlock()
+	}
+	return userOK
 }
 
 // authenticated reports whether r carries valid credentials, and whether it
@@ -72,9 +102,7 @@ func (a *adminCtx) authenticated(r *http.Request, c authCreds) (ok, badBasic boo
 		return true, false
 	}
 	u, p, hasBasic := r.BasicAuth()
-	userOK := subtle.ConstantTimeCompare([]byte(u), []byte("admin")) == 1
-	passOK := subtle.ConstantTimeCompare([]byte(p), []byte(c.password)) == 1
-	ok = hasBasic && userOK && passOK && c.password != ""
+	ok = hasBasic && a.checkLogin(c, u, p)
 	return ok, hasBasic && !ok
 }
 
@@ -134,9 +162,9 @@ func (a *adminCtx) sessionInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]bool{"authenticated": ok, "two_factor": c.totpSecret != ""})
 }
 
-// POST /api/login (public): password + code, sets the session cookie.
+// POST /api/login (public): username, password and code; sets the session cookie.
 func (a *adminCtx) login(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Password, Code string }
+	var req struct{ User, Password, Code string }
 	if err := decodeBody(r, &req); err != nil {
 		writeJSONError(w, 400, err.Error())
 		return
@@ -150,10 +178,9 @@ func (a *adminCtx) login(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 429, "too many failed logins; wait a minute")
 		return
 	}
-	passOK := c.password != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(c.password)) == 1
-	if !passOK || !a.checkCode(c.totpSecret, req.Code) {
+	if !a.checkLogin(c, req.User, req.Password) || !a.checkCode(c.totpSecret, req.Code) {
 		a.failed(r, "dashboard login failed")
-		writeJSONError(w, 401, "wrong password or code")
+		writeJSONError(w, 401, "wrong username, password or code")
 		return
 	}
 	a.startSession(w, r, c.totpSecret)
@@ -253,8 +280,7 @@ func (a *adminCtx) twoFactorDisable(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 429, "too many failed attempts; wait a minute")
 		return
 	}
-	passOK := subtle.ConstantTimeCompare([]byte(req.Password), []byte(c.password)) == 1
-	if !passOK || !a.checkCode(c.totpSecret, req.Code) {
+	if !a.checkLogin(c, c.user, req.Password) || !a.checkCode(c.totpSecret, req.Code) {
 		a.failed(r, "2FA disable: wrong password or code")
 		writeJSONError(w, 401, "wrong password or code")
 		return

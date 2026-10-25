@@ -45,7 +45,7 @@ ollamawg init --endpoint vpn.example.com:51820
 `init` writes `server.yaml` with mode 0600 and prints the following:
 
 - **The server's public key.** You never need to copy it by hand, because generated client configs include it.
-- **The dashboard address and password.** The username is `admin`.
+- **The dashboard address, username and password.** The username is `admin` unless you pass `--user`. Run `ollamawg passwd` any time to choose your own password.
 
 Useful flags:
 

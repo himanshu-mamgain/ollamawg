@@ -101,6 +101,36 @@ Ollama apps such as Enchanted or Reins work too: point them at `http://10.77.0.1
 
 See [Getting started](docs/getting-started.md) for the full walkthrough.
 
+## Dashboard login
+
+The dashboard runs on the server at `http://127.0.0.1:8088`. The browser asks for a username and password.
+
+**Username and password.** `init` creates the user `admin` with a random password, which it prints and saves in `server.yaml` under `admin.password`. To choose your own:
+
+```sh
+ollamawg passwd                    # asks for a new password twice
+ollamawg passwd --user himanshu    # also change the username
+ollamawg init --endpoint ... --user himanshu --set-password    # or choose both at setup
+```
+
+Passwords you choose are stored as a bcrypt hash (`admin.password_hash`), never in plain text. A running server picks up the change within 2 seconds.
+
+**Two-factor login (2FA).** This adds a 6-digit code from an authenticator app, such as Google Authenticator, Authy, 1Password or Microsoft Authenticator.
+
+```sh
+ollamawg 2fa enable     # shows a QR code: scan it, then type the code to confirm
+ollamawg 2fa status
+ollamawg 2fa disable    # also the way back in if you lose your phone
+```
+
+You can also turn it on from the **2FA** button in the dashboard.
+
+With 2FA on:
+- The dashboard opens on a login form that asks for the username, password and code.
+- Scripts and Prometheus use the API token (`admin.api_token`) as `Authorization: Bearer <token>`.
+
+See [Dashboard and admin API](docs/dashboard.md).
+
 ## Features
 
 - **Userspace WireGuard** on Linux, macOS, Windows and the BSDs, with no admin rights needed on the server or on computers.
@@ -139,6 +169,7 @@ Server
   block        block --device or --ip
   unblock      undo a block
   serve        run the tunnel, proxy, chat page and dashboard
+  passwd       set your own dashboard username and password
   2fa          enable, disable or check two-factor dashboard login
 
 Client

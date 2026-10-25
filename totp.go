@@ -123,6 +123,31 @@ func QRSVG(text string) (string, error) {
 	return b.String(), nil
 }
 
+// QRTerminalANSI renders text as a QR code made of spaces with ANSI
+// background colours, two columns per module. It doesn't depend on the font,
+// so it works where block characters don't render (the legacy Windows
+// console), but the terminal must understand ANSI colour codes.
+func QRTerminalANSI(text string) (string, error) {
+	c, err := qr.Encode(text, qr.L)
+	if err != nil {
+		return "", err
+	}
+	const quiet = 2
+	const white, black, reset = "\x1b[47m  ", "\x1b[40m  ", "\x1b[0m"
+	var b strings.Builder
+	for y := -quiet; y < c.Size+quiet; y++ {
+		for x := -quiet; x < c.Size+quiet; x++ {
+			if x >= 0 && y >= 0 && x < c.Size && y < c.Size && c.Black(x, y) {
+				b.WriteString(black)
+			} else {
+				b.WriteString(white)
+			}
+		}
+		b.WriteString(reset + "\n")
+	}
+	return b.String(), nil
+}
+
 // QRTerminal renders text as a QR code with Unicode half blocks, two module
 // rows per line. Light modules are drawn as blocks, so it reads correctly on
 // the dark background most terminals use.
