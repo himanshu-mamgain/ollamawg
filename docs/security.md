@@ -62,7 +62,7 @@ Basic auth or a session cookie over plain HTTP is fine on loopback or an SSH tun
 ## Keys and files
 
 - `server.yaml` (server private key, dashboard password, 2FA secret, API token) and each `<device>.yaml` (device private key) are written with mode 0600, atomically.
-- `serve` warns if `server.yaml` is readable by other users.
+- `serve` warns if `server.yaml` is readable by other users (on Unix; on Windows, files in your user folder are protected by its ACLs).
 - The server only stores device **public** keys and preshared keys. Losing `server.yaml` means re-issuing configs. Leaking it means rotating everything: run `init --force` and add the devices again.
 - To revoke a device, run `remove-peer`, or press **Delete** in the dashboard. A leaked device config is useless once its peer is removed.
 

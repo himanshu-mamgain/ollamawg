@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -334,7 +335,9 @@ func cmdServe(args []string) error {
 	if err != nil {
 		return err
 	}
-	if st, err := os.Stat(*path); err == nil && st.Mode().Perm()&0o077 != 0 {
+	// Windows has no Unix mode bits (Go reports every writable file as 0666);
+	// files under the user profile are protected by ACLs instead.
+	if st, err := os.Stat(*path); err == nil && runtime.GOOS != "windows" && st.Mode().Perm()&0o077 != 0 {
 		log.Warn("config file is readable by other users; run: chmod 600 " + *path)
 	}
 	if open := ollamawg.CheckUpstreamExposure(cfg.Server.Upstream); len(open) > 0 {
