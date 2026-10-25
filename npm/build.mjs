@@ -3,7 +3,7 @@
 //   node npm/build.mjs <version>
 //
 // Expects dist/bin/ollamawg-<goos>-<goarch>[.exe] for every target below.
-// Writes dist/npm/<platform>/ (one package per binary) and dist/npm/ollamawg/
+// Writes dist/npm/<platform>/ (one package per binary) and dist/npm/cli/
 // (the launcher), all stamped with <version>.
 import { chmodSync, copyFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -29,7 +29,7 @@ const targets = [
 const out = join(root, "dist", "npm");
 rmSync(out, { recursive: true, force: true });
 
-const main = JSON.parse(readFileSync(join(root, "npm", "ollamawg", "package.json"), "utf8"));
+const main = JSON.parse(readFileSync(join(root, "npm", "cli", "package.json"), "utf8"));
 main.version = version;
 main.optionalDependencies = {};
 
@@ -61,12 +61,12 @@ for (const t of targets) {
     ) + "\n"
   );
   copyFileSync(join(root, "LICENSE"), join(dir, "LICENSE"));
-  writeFileSync(join(dir, "README.md"), `# ${name}\n\nThe ${t.os}-${t.cpu} binary for [ollamawg](https://www.npmjs.com/package/ollamawg). Install \`ollamawg\` instead.\n`);
+  writeFileSync(join(dir, "README.md"), `# ${name}\n\nThe ${t.os}-${t.cpu} binary for [ollamawg](https://www.npmjs.com/package/@ollamawg/cli). Install \`@ollamawg/cli\` instead.\n`);
   main.optionalDependencies[name] = version;
 }
 
-const mainDir = join(out, "ollamawg");
-cpSync(join(root, "npm", "ollamawg"), mainDir, { recursive: true });
+const mainDir = join(out, "cli");
+cpSync(join(root, "npm", "cli"), mainDir, { recursive: true });
 writeFileSync(join(mainDir, "package.json"), JSON.stringify(main, null, 2) + "\n");
 copyFileSync(join(root, "README.md"), join(mainDir, "README.md"));
 for (const f of ["LICENSE", "LICENSE.md"]) {

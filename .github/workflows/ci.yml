@@ -117,7 +117,7 @@ jobs:
         run: |
           mkdir app && cd app
           npm init -y > /dev/null
-          npm install "../tgz/ollamawg-${{ matrix.platform }}-0.0.0-ci.tgz" ../tgz/ollamawg-0.0.0-ci.tgz
+          npm install "../tgz/ollamawg-${{ matrix.platform }}-0.0.0-ci.tgz" ../tgz/ollamawg-cli-0.0.0-ci.tgz
           out=$(npx --no-install ollamawg version)
           echo "$out"
           [ "$out" = "0.0.0-ci" ]

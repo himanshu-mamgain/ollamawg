@@ -2,7 +2,7 @@ name: Publish
 
 # Publishes ollamawg to npm and creates the GitHub Release whenever main carries
 # a version that is missing from either. Bump "version" in
-# npm/ollamawg/package.json and Version in server.go in a PR; merging it
+# npm/cli/package.json and Version in server.go in a PR; merging it
 # releases. Every npm package is checked separately, so a re-run finishes a
 # release that stopped halfway.
 on:
@@ -42,11 +42,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION=$(node -p "require('./npm/ollamawg/package.json').version")
+          VERSION=$(node -p "require('./npm/cli/package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           MISSING=
-          for name in $(node -p "['ollamawg', ...Object.keys(require('./npm/ollamawg/package.json').optionalDependencies)].join(' ')"); do
+          for name in $(node -p "['@ollamawg/cli', ...Object.keys(require('./npm/cli/package.json').optionalDependencies)].join(' ')"); do
             if npm view "$name@$VERSION" version >/dev/null 2>&1; then
               echo "$name@$VERSION is already on npm."
             else
@@ -103,11 +103,11 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           for name in $MISSING; do
-            [ "$name" = ollamawg ] && continue
+            [ "$name" = @ollamawg/cli ] && continue
             npm publish "dist/npm/${name#@ollamawg/}" --provenance --access public
           done
           case " $MISSING " in
-            *" ollamawg "*) npm publish dist/npm/ollamawg --provenance --access public ;;
+            *" @ollamawg/cli "*) npm publish dist/npm/cli --provenance --access public ;;
           esac
 
       - if: steps.version.outputs.release == 'true'

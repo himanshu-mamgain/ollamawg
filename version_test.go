@@ -9,7 +9,7 @@ import (
 // The npm package version decides what the publish workflow releases, and the
 // binary reports Version, so the two must not drift apart.
 func TestVersionMatchesNpmPackage(t *testing.T) {
-	data, err := os.ReadFile("npm/ollamawg/package.json")
+	data, err := os.ReadFile("npm/cli/package.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +21,7 @@ func TestVersionMatchesNpmPackage(t *testing.T) {
 		t.Fatal(err)
 	}
 	if pkg.Version != Version {
-		t.Errorf("npm/ollamawg/package.json version is %q, server.go Version is %q", pkg.Version, Version)
+		t.Errorf("npm/cli/package.json version is %q, server.go Version is %q", pkg.Version, Version)
 	}
 	for name, v := range pkg.OptionalDependencies {
 		if v != pkg.Version {

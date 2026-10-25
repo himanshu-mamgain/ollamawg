@@ -1,5 +1,5 @@
 {
-  "name": "ollamawg",
+  "name": "@ollamawg/cli",
   "version": "0.1.0",
   "description": "Reach your Ollama server from anywhere through a user-space WireGuard tunnel, with per-device access control and a dashboard.",
   "keywords": ["ollama", "wireguard", "tunnel", "llm", "proxy", "vpn"],
