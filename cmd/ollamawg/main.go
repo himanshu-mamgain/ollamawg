@@ -46,6 +46,7 @@ Server (the machine running Ollama):
   passwd       set your own dashboard username and password
   2fa          enable, disable or check two-factor login for the dashboard
   firewall     let devices through the Windows Firewall (one permission prompt)
+  relay        run or use a relay, for servers behind CGNAT (see: ollamawg relay help)
 
 Client (each device):
   connect      bring the tunnel up and expose Ollama on 127.0.0.1:11434
@@ -66,7 +67,7 @@ func main() {
 	cmds := map[string]func([]string) error{
 		"init": cmdInit, "add-peer": cmdAddPeer, "reissue": cmdReissue, "remove-peer": cmdRemovePeer, "list-peers": cmdListPeers,
 		"block": func(a []string) error { return cmdBlock(a, true) }, "unblock": func(a []string) error { return cmdBlock(a, false) },
-		"serve": cmdServe, "passwd": cmdPasswd, "2fa": cmd2FA, "firewall": cmdFirewall, "connect": cmdConnect, "status": cmdStatus, "keygen": cmdKeygen,
+		"serve": cmdServe, "passwd": cmdPasswd, "2fa": cmd2FA, "firewall": cmdFirewall, "relay": cmdRelay, "connect": cmdConnect, "status": cmdStatus, "keygen": cmdKeygen,
 		"version": func([]string) error { fmt.Println(ollamawg.Version); return nil },
 	}
 	name := os.Args[1]
@@ -116,11 +117,19 @@ func cmdInit(args []string) error {
 	user := fs.String("user", "admin", "dashboard username")
 	setPass := fs.Bool("set-password", false, "choose the dashboard password (asked twice) instead of generating one")
 	noFirewall := fs.Bool("no-firewall", false, "don't add the Windows Firewall rule for the WireGuard port")
+	relay := fs.String("relay", "", "host:port of an `ollamawg relay`, if devices can't reach this machine directly (CGNAT)")
+	relayToken := fs.String("relay-token", "", "the relay's token (from its relay.yaml)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if *endpoint == "" && *relay != "" {
+		*endpoint = *relay // devices dial the relay
+	}
 	if *endpoint == "" {
-		return errors.New("--endpoint is required, e.g. --endpoint vpn.example.com:51820 (or your public IP)")
+		return errors.New("--endpoint is required, e.g. --endpoint vpn.example.com:51820 (or your public IP); behind CGNAT, use --relay instead")
+	}
+	if (*relay == "") != (*relayToken == "") {
+		return errors.New("--relay and --relay-token go together")
 	}
 	if !ollamawg.ValidUser(*user) {
 		return fmt.Errorf("--user %q: use letters, digits, '-', '_', '.' or '@'", *user)
@@ -134,6 +143,9 @@ func cmdInit(args []string) error {
 	}
 	cfg.Server.Upstream = *upstream
 	cfg.Admin.Listen = *admin
+	if *relay != "" {
+		cfg.Server.Relay, cfg.Server.RelayToken, cfg.Server.MTU = *relay, *relayToken, ollamawg.RelayMTU
+	}
 	if *user != "admin" {
 		cfg.Admin.User = *user
 	}
@@ -153,7 +165,11 @@ func cmdInit(args []string) error {
 		return err
 	}
 	fw := "open this port in your firewall/router"
-	if !*noFirewall {
+	switch {
+	case *relay != "":
+		// Outbound only: the firewall and NAT let the relay's replies back in.
+		fw = "devices connect through the relay at " + *relay + "; no port forwarding needed"
+	case !*noFirewall:
 		fw = initFirewall(cfg.Server.ListenPort)
 	}
 	fmt.Printf("Created %s\n\n", *path)
@@ -414,7 +430,9 @@ func cmdServe(args []string) error {
 	if open := ollamawg.CheckUpstreamExposure(cfg.Server.Upstream); len(open) > 0 {
 		log.Warn("Ollama is reachable WITHOUT the tunnel; set OLLAMA_HOST=127.0.0.1:11434 and restart Ollama", "exposed_on", strings.Join(open, ", "))
 	}
-	warnFirewall(cfg.Server.ListenPort, log)
+	if cfg.Server.Relay == "" { // with a relay, nothing comes in unsolicited
+		warnFirewall(cfg.Server.ListenPort, log)
+	}
 	srv, err := ollamawg.NewServer(cfg, ollamawg.ServerOptions{ConfigPath: *path, Logger: log})
 	if err != nil {
 		return err
@@ -776,5 +794,139 @@ func cmdFirewall(args []string) error {
 	}
 	fmt.Printf("Done. Devices can now reach UDP port %d on private networks (rule %q).\n", port, firewallRuleName(port))
 	fmt.Println("If your Wi-Fi is set as a Public network, switch it to Private in Windows settings.")
+	return nil
+}
+
+const usageRelay = `usage: ollamawg relay [init|use] [flags]
+
+A relay lets devices reach a server that can't accept inbound connections
+(CGNAT, no port forwarding). Run it on any machine with a public IP, e.g. a
+small cloud VM. It forwards encrypted WireGuard packets and can't read them.
+
+On the public machine:
+  ollamawg relay init                  create relay.yaml with a token
+  ollamawg relay                       run the relay (open UDP 51820 to it)
+
+On the machine running Ollama:
+  ollamawg relay use --relay relay.example.com:51820 --token <token>
+                                       point an existing server.yaml at it
+  (or, for a new server: ollamawg init --relay ... --relay-token ...)
+`
+
+func cmdRelay(args []string) error {
+	if len(args) > 0 && (args[0] == "init" || args[0] == "use") {
+		if args[0] == "init" {
+			return cmdRelayInit(args[1:])
+		}
+		return cmdRelayUse(args[1:])
+	}
+	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
+		fmt.Print(usageRelay)
+		return nil
+	}
+	fs := newFlags("relay")
+	path := fs.String("config", "relay.yaml", "relay config (create it with: ollamawg relay init)")
+	level := fs.String("log-level", "info", "debug, info, warn or error")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	log := logger(*level)
+	cfg, err := ollamawg.LoadRelayConfig(*path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("%s not found; create it with: ollamawg relay init", *path)
+		}
+		return err
+	}
+	r, err := ollamawg.ListenRelay(cfg.Listen, cfg.Token, log)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := signalContext()
+	defer cancel()
+	log.Info("relay listening; waiting for the server to register", "udp", r.Addr().String())
+	go func() {
+		t := time.NewTicker(5 * time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				st := r.Status()
+				log.Info("relay status", "server_connected", st.ServerConnected, "server", st.ServerAddr, "devices", st.Devices)
+			}
+		}
+	}()
+	return r.Serve(ctx)
+}
+
+func cmdRelayInit(args []string) error {
+	fs := newFlags("relay init")
+	path := fs.String("config", "relay.yaml", "relay config to create")
+	listen := fs.String("listen", fmt.Sprintf(":%d", ollamawg.DefaultListenPort), "UDP address to listen on")
+	force := fs.Bool("force", false, "overwrite an existing config (the old token stops working)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if _, err := os.Stat(*path); err == nil && !*force {
+		return fmt.Errorf("%s already exists (use --force to replace it and its token)", *path)
+	}
+	cfg := ollamawg.NewRelayConfig(*listen)
+	if err := cfg.Save(*path); err != nil {
+		return err
+	}
+	fmt.Printf("Created %s (relay on udp %s)\n\n", *path, cfg.Listen)
+	fmt.Printf("  token  %s\n\n", cfg.Token)
+	fmt.Println("Next:")
+	fmt.Println("  1. Open UDP", strings.TrimPrefix(cfg.Listen, ":"), "to this machine (cloud firewall / security group).")
+	fmt.Println("  2. Run the relay:  ollamawg relay")
+	fmt.Println("  3. On the machine running Ollama:")
+	fmt.Printf("     ollamawg relay use --relay <this-machine's-public-ip-or-dns>:%s --token %s\n", strings.TrimPrefix(cfg.Listen, ":"), cfg.Token)
+	return nil
+}
+
+func cmdRelayUse(args []string) error {
+	fs := newFlags("relay use")
+	path := fs.String("config", "server.yaml", "server config file")
+	relay := fs.String("relay", "", "relay host:port (required)")
+	token := fs.String("token", "", "the relay's token (required)")
+	off := fs.Bool("off", false, "stop using a relay; also set --endpoint for direct connections")
+	endpoint := fs.String("endpoint", "", "with --off: the host:port devices should dial directly")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	cfg, err := ollamawg.LoadServerConfig(*path)
+	if err != nil {
+		return err
+	}
+	if *off {
+		if *endpoint == "" {
+			return errors.New("--off needs --endpoint, the host:port devices will dial directly")
+		}
+		cfg.Server.Relay, cfg.Server.RelayToken, cfg.Server.PublicEndpoint = "", "", *endpoint
+	} else {
+		if *relay == "" || *token == "" {
+			return errors.New("--relay and --token are required (both come from `ollamawg relay init` on the relay)")
+		}
+		cfg.Server.Relay, cfg.Server.RelayToken, cfg.Server.PublicEndpoint = *relay, *token, *relay
+		if cfg.Server.MTU == 0 || cfg.Server.MTU > ollamawg.RelayMTU {
+			cfg.Server.MTU = ollamawg.RelayMTU
+		}
+	}
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	if err := cfg.Save(*path); err != nil {
+		return err
+	}
+	if *off {
+		fmt.Printf("Stopped using the relay. Devices will dial %s.\n", *endpoint)
+	} else {
+		fmt.Printf("Devices will now reach this server through the relay at %s.\n", *relay)
+	}
+	fmt.Println("Restart `ollamawg serve` to apply it. Existing devices still have the old address:")
+	fmt.Println("give each a new config with `ollamawg reissue --name <device>` (or --qr for phones),")
+	fmt.Println("or edit the Endpoint in their WireGuard app.")
 	return nil
 }

@@ -334,6 +334,9 @@ func (a *adminCtx) overview(w http.ResponseWriter, r *http.Request) {
 	out["packets_dropped"] = dropped
 	out["firewall_default"] = def
 	out["firewall_rules"] = len(rules)
+	if s.relay != nil {
+		out["relay"] = map[string]any{"address": s.relay.addr, "connected": s.relay.Connected(), "last_ack": s.relay.LastAck()}
+	}
 	out["last24h"] = map[string]any{
 		"requests": last.Requests, "errors": last.Errors, "denied": last.Denied,
 		"prompt_tokens": last.PromptTokens, "completion_tokens": last.CompletionTokens,

@@ -21,6 +21,8 @@ server:
   proxy_port: 11434                  # TCP port of the proxy inside the tunnel
   mtu: 1420
   max_body_mb: 64                    # request body cap (images, long prompts)
+  relay: relay.example.com:51820     # optional: dial out to an ollamawg relay (CGNAT); see relay.md
+  relay_token: yh_D...               # the relay's token, from its relay.yaml
 
 admin:
   listen: 127.0.0.1:8088             # dashboard + admin API + /metrics
@@ -69,6 +71,8 @@ peers:
 | `proxy_port` | `11434` | The port clients dial inside the tunnel. |
 | `mtu` | `1420` | Lower it, for example to 1280, on networks that drop large UDP packets (some mobile carriers, PPPoE). |
 | `max_body_mb` | `64` | Larger bodies get `413`. |
+| `relay` | none | `host:port` of an `ollamawg relay`. The server registers with it every 15 seconds from its WireGuard port, and devices reach the server through it. Set `public_endpoint` to the same address, and `mtu` to 1380. `ollamawg relay use` does all three. See [Relay](relay.md). |
+| `relay_token` | none | Must match the relay's `relay.yaml` token. It authenticates the server's registrations; it is not a WireGuard key. |
 
 ### `admin`
 

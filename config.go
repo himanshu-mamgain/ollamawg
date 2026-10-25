@@ -104,7 +104,17 @@ type ServerSection struct {
 	MTU       int `yaml:"mtu"`
 	// MaxBodyMB caps request bodies forwarded upstream (0 = 64 MB).
 	MaxBodyMB int `yaml:"max_body_mb,omitempty"`
+	// Relay is the host:port of an `ollamawg relay`, for servers that can't
+	// accept inbound connections (CGNAT, no port forwarding). The server dials
+	// out to it; set PublicEndpoint to the same address so devices use it.
+	Relay string `yaml:"relay,omitempty"`
+	// RelayToken authenticates this server to the relay (its relay.yaml token).
+	RelayToken string `yaml:"relay_token,omitempty"`
 }
+
+// RelayMTU is the tunnel MTU used with a relay: the relay's header (up to 20
+// bytes) must fit inside a 1500-byte path without fragmenting.
+const RelayMTU = 1380
 
 // AdminSection configures the host-only dashboard and admin API.
 type AdminSection struct {
@@ -326,6 +336,14 @@ func (c *ServerConfig) Validate() error {
 	u, err := url.Parse(c.Server.Upstream)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return fmt.Errorf("server.upstream must be an http(s) URL, got %q", c.Server.Upstream)
+	}
+	if c.Server.Relay != "" {
+		if _, _, err := net.SplitHostPort(c.Server.Relay); err != nil {
+			return fmt.Errorf("server.relay must be host:port, got %q", c.Server.Relay)
+		}
+		if len(c.Server.RelayToken) < 16 {
+			return errors.New("server.relay_token is missing or too short; copy it from the relay's relay.yaml")
+		}
 	}
 	if c.Admin.User != "" && !validUser(c.Admin.User) {
 		return fmt.Errorf("admin.user %q: use letters, digits, '-', '_', '.' or '@'", c.Admin.User)

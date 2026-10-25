@@ -78,6 +78,8 @@ Basic auth or a session cookie over plain HTTP is fine on loopback or an SSH tun
 
 ## Limits worth knowing
 
+- **A relay sees metadata, never content.** With `server.relay` set, an `ollamawg relay` forwards WireGuard ciphertext between devices and the server. It has no WireGuard keys, so it can't decrypt traffic or impersonate either side. It does learn device IP addresses, timing and volume, and it can stop forwarding. Host it yourself. See [Relay](relay.md).
+
 - **Source IPs can be spoofed for UDP.** IP block rules stop junk and scanners cheaply, but they are not authentication. The WireGuard key is. A spoofed packet still can't complete a handshake.
 - **Default-deny firewall mode depends on clients' public IPs.** Phones and laptops roam, so prefer `allow` plus keys unless your clients have fixed addresses.
 - **Rate limits are per device and in memory.** They reset on restart and are not a quota system.

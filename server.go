@@ -67,6 +67,7 @@ type Server struct {
 	dev      *device.Device
 	tnet     *netstack.Net
 	fw       *Firewall
+	relay    *relayBind // nil unless server.relay is set
 	obs      *Observer
 	proxy    *httputil.ReverseProxy
 	upstream *url.URL
@@ -228,6 +229,10 @@ func (s *Server) Run(ctx context.Context) error {
 	bind := s.opts.Bind
 	if bind == nil {
 		bind = conn.NewDefaultBind()
+	}
+	if cfg.Server.Relay != "" {
+		s.relay = newRelayBind(bind, cfg.Server.Relay, cfg.Server.RelayToken, s.log)
+		bind = s.relay
 	}
 	s.dev = device.NewDevice(tun, s.fw.Bind(bind), &device.Logger{
 		Verbosef: func(f string, a ...any) { s.log.Debug("wireguard: " + fmt.Sprintf(f, a...)) },

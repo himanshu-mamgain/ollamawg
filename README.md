@@ -43,12 +43,7 @@ Ollama itself stays on `127.0.0.1`. Nothing outside the tunnel can talk to it.
 - **A UDP port that devices can reach.** By default this is 51820.
   - At home, forward UDP 51820 on your router to the server.
   - On a cloud VM, open it in the security group.
-- **Behind CGNAT this won't work as-is.** Many home and mobile ISPs put customers behind carrier-grade NAT, where the router's WAN address is private (`10.x`, `100.64.x`) and no port can be forwarded. You can still:
-  - use the server's LAN address as the endpoint, which works for devices on the same network;
-  - ask your ISP for a public IP;
-  - or relay through a small VPS.
-
-  See [Troubleshooting](docs/getting-started.md#troubleshooting).
+- **Behind CGNAT? Use a relay.** Many home and mobile ISPs put customers behind carrier-grade NAT, where the router's WAN address is private (`10.x`, `100.64.x`) and no port can be forwarded. Run `ollamawg relay` on any machine with a public IP, for example a free or $5 cloud VM. Your server dials out to it, and devices connect from anywhere, with no port forwarding. The relay only forwards encrypted packets it can't read. See [Relay](docs/relay.md).
 
 ## Install
 
@@ -159,6 +154,7 @@ See [Dashboard and admin API](docs/dashboard.md).
 ## Features
 
 - **Userspace WireGuard** on Linux, macOS, Windows and the BSDs, with no admin rights needed on the server or on computers.
+- **Works behind CGNAT.** With `ollamawg relay` on any machine with a public IP, devices connect from anywhere, and the server only dials out. The relay forwards ciphertext it can't read.
 - **Phones.** Any device with the official WireGuard app connects by scanning a QR code. Only the server's tunnel address is routed through it, so the phone's other traffic is unaffected.
 - **Chat page.** A built-in, mobile-friendly chat interface at `/chat`, served inside the tunnel.
   - Streaming replies, Markdown and code blocks, and a model picker limited to what the device is allowed to use.
@@ -198,6 +194,7 @@ Server
   passwd       set your own dashboard username and password
   2fa          enable, disable or check two-factor dashboard login
   firewall     let devices through the Windows Firewall (one permission prompt)
+  relay        run a relay, or point the server at one, for servers behind CGNAT
 
 Client
   connect      bring the tunnel up and expose Ollama on 127.0.0.1:11434
@@ -219,11 +216,12 @@ Run `ollamawg <command> -h` for a command's flags.
 | [Dashboard and admin API](docs/dashboard.md) | The UI, two-factor login, the HTTP API behind it, Prometheus metrics |
 | [Security model](docs/security.md) | What is protected, how, and what is not |
 | [Running as a service](docs/deploy.md) | systemd, launchd, Windows, Docker, port forwarding |
+| [Relay](docs/relay.md) | Connect from anywhere when the server is behind CGNAT |
 | [Go library](docs/library.md) | Embedding the server and client in your own programs |
 
 ## Limitations
 
-- **Devices need to reach one UDP port on the server.** There is no relay or NAT traversal. CGNAT connections need one of the workarounds in [Requirements](#requirements).
+- **Behind CGNAT, devices need a relay** on a machine with a public IP. See [Relay](docs/relay.md). The relay serves one server, and all traffic takes the detour through it.
 - **The dashboard has one admin account.** Put a reverse proxy with SSO in front if several people manage it.
 - **Chat history lives in each device's browser.** It is not synced between devices or stored on the server.
 - **No independent security audit yet.** Treat ollamawg as an evolving security tool, not an independently verified security product. The cryptography comes from wireguard-go and gVisor; the policy layer is small and covered by end-to-end tests. See the [Security model](docs/security.md).
