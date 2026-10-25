@@ -133,8 +133,19 @@
   </form>
   <div id="add-result" hidden>
     <h3>Config for <span id="add-name"></span></h3>
-    <p class="warn-note">This is the only copy of the device's private key. Move it to the device, then run <code>ollamawg connect --config <span id="add-file"></span></code>.</p>
-    <pre id="add-config" class="cfg"></pre>
+    <div class="seg add-kind" role="group" aria-label="Device type">
+      <button type="button" data-kind="computer" aria-pressed="true">Computer</button>
+      <button type="button" data-kind="phone" aria-pressed="false">Phone</button>
+    </div>
+    <div id="add-computer">
+      <p class="warn-note">This is the only copy of the device's private key. Move it to the device, then run <code>ollamawg connect --config <span id="add-file"></span></code>.</p>
+      <pre id="add-config" class="cfg"></pre>
+    </div>
+    <div id="add-phone" hidden>
+      <p class="warn-note">Install the official <strong>WireGuard</strong> app, tap <strong>+</strong> then <strong>Create from QR code</strong>, and scan this. It is the only copy of the device's private key.</p>
+      <div class="tfa-qr"><img id="add-qr" alt="WireGuard QR code for this device"></div>
+      <p class="hint">With the tunnel on, open <code id="add-chat"></code> on the phone to chat with your models, or point any Ollama app at that address without <code>/chat</code>.</p>
+    </div>
     <div class="actions"><button class="btn" id="add-copy">Copy</button><button class="btn" id="add-download">Download</button><button class="btn primary" id="add-done">Done</button></div>
   </div>
 </dialog>

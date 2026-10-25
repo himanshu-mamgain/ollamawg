@@ -26,6 +26,11 @@ func fakeOllama(t *testing.T, hostSeen *atomic.Value) *httptest.Server {
 		io.WriteString(w, `{"version":"0.9.9"}`)
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
+		// Like Ollama's CORS check: only local origins are allowed by default.
+		if o := r.Header.Get("Origin"); o != "" && !strings.HasPrefix(o, "http://127.0.0.1") && !strings.HasPrefix(o, "http://localhost") {
+			http.Error(w, "origin not allowed", http.StatusForbidden)
+			return
+		}
 		hostSeen.Store(r.Host)
 		io.WriteString(w, `{"models":[{"name":"llama3.2:latest"}]}`)
 	})

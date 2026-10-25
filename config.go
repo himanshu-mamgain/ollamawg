@@ -481,6 +481,43 @@ func (c *ClientConfig) Marshal() ([]byte, error) {
 	return encodeYAML(c, "# ollamawg client config. Contains this device's private key: keep it secret.\n")
 }
 
+// WireGuardConf returns the config in wg-quick format, for the official
+// WireGuard apps (iOS, Android, macOS, Windows) instead of `ollamawg
+// connect`. Only the server's tunnel address is routed, so the rest of the
+// device's traffic is unaffected. Apps then reach Ollama, and the chat page
+// at /chat, on http://<server_address>:<server_port>.
+func (c *ClientConfig) WireGuardConf() string {
+	cl := c.Client
+	var b strings.Builder
+	fmt.Fprintf(&b, "# ollamawg device %q. Contains this device's private key: keep it secret.\n", cl.Name)
+	fmt.Fprintf(&b, "# Ollama and the chat page: http://%s:%d (/chat)\n", cl.ServerAddress, cl.ServerPort)
+	fmt.Fprintf(&b, "[Interface]\nPrivateKey = %s\nAddress = %s/32\n", cl.PrivateKey, cl.Address)
+	if cl.MTU > 0 {
+		fmt.Fprintf(&b, "MTU = %d\n", cl.MTU)
+	}
+	fmt.Fprintf(&b, "\n[Peer]\nPublicKey = %s\n", cl.ServerPublicKey)
+	if !cl.PresharedKey.IsZero() {
+		fmt.Fprintf(&b, "PresharedKey = %s\n", cl.PresharedKey)
+	}
+	fmt.Fprintf(&b, "Endpoint = %s\nAllowedIPs = %s/32\n", cl.Endpoint, cl.ServerAddress)
+	if cl.Keepalive > 0 {
+		fmt.Fprintf(&b, "PersistentKeepalive = %d\n", cl.Keepalive)
+	}
+	return b.String()
+}
+
+// WireGuardQRText is WireGuardConf without comments, which keeps the QR code
+// small enough to scan easily.
+func (c *ClientConfig) WireGuardQRText() string {
+	var out []string
+	for _, l := range strings.Split(c.WireGuardConf(), "\n") {
+		if !strings.HasPrefix(l, "#") {
+			out = append(out, l)
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
 func encodeYAML(v any, header string) ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteString(header)

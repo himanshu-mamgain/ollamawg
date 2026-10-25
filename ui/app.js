@@ -365,7 +365,10 @@ $('#add-form').addEventListener('submit', async ev => {
     $('#add-name').textContent = r.name;
     $('#add-file').textContent = r.filename;
     $('#add-config').textContent = r.config;
+    $('#add-qr').src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(r.wg_qr_svg);
+    $('#add-chat').textContent = r.chat_url;
     S.added = r;
+    addKind('computer');
     f.hidden = true;
     $('#add-result').hidden = false;
     refresh(true);
@@ -373,19 +376,33 @@ $('#add-form').addEventListener('submit', async ev => {
     toast(e.message, true);
   }
 });
+// Computer: YAML for `ollamawg connect`. Phone: wg-quick config (QR, or
+// the .conf file) for the official WireGuard app.
+function addKind(kind) {
+  S.addKind = kind;
+  $$('[data-kind]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.kind === kind)));
+  $('#add-computer').hidden = kind !== 'computer';
+  $('#add-phone').hidden = kind !== 'phone';
+}
+$$('[data-kind]').forEach(b => b.addEventListener('click', () => addKind(b.dataset.kind)));
+const addedFile = () => S.addKind === 'phone'
+  ? { text: S.added.wg_config, name: S.added.wg_filename, type: 'text/plain' }
+  : { text: S.added.config, name: S.added.filename, type: 'application/yaml' };
 $('#add-copy').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(S.added.config); toast('Copied config'); }
+  try { await navigator.clipboard.writeText(addedFile().text); toast('Copied config'); }
   catch { toast('Copy failed. Select the text and copy it instead.', true); }
 });
 $('#add-download').addEventListener('click', () => {
+  const f = addedFile();
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([S.added.config], { type: 'application/yaml' }));
-  a.download = S.added.filename;
+  a.href = URL.createObjectURL(new Blob([f.text], { type: f.type }));
+  a.download = f.name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
-$('#add-done').addEventListener('click', () => { S.added = null; $('#add-config').textContent = ''; $('#dlg-add').close(); });
-$('#dlg-add').addEventListener('close', () => { S.added = null; $('#add-config').textContent = ''; });
+function clearAdded() { S.added = null; $('#add-config').textContent = ''; $('#add-qr').removeAttribute('src'); }
+$('#add-done').addEventListener('click', () => { clearAdded(); $('#dlg-add').close(); });
+$('#dlg-add').addEventListener('close', clearAdded);
 
 /* ---------- sources ---------- */
 function renderSources(src) {

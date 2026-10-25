@@ -146,11 +146,15 @@ func cmdAddPeer(args []string) error {
 	models := fs.String("models", "", "comma-separated model allowlist, e.g. llama3.2,qwen3:* (empty = all)")
 	rpm := fs.Int("rpm", 0, "requests per minute limit (0 = unlimited)")
 	out := fs.String("out", "", "client config to write (default <name>.yaml)")
+	qr := fs.Bool("qr", false, "for phones: print a QR code to scan in the WireGuard app instead of writing a config file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *name == "" {
 		return errors.New("--name is required")
+	}
+	if *qr && *out != "" {
+		return errors.New("--qr prints the config instead of writing it; drop --out")
 	}
 	cfg, err := ollamawg.LoadServerConfig(*path)
 	if err != nil {
@@ -169,6 +173,23 @@ func cmdAddPeer(args []string) error {
 	}
 	if err := cfg.Validate(); err != nil {
 		return err
+	}
+	if *qr {
+		code, err := ollamawg.QRTerminal(cc.WireGuardQRText())
+		if err != nil {
+			return err
+		}
+		if err := cfg.Save(*path); err != nil {
+			return err
+		}
+		fmt.Printf("Added %s: device id %s, address %s, role %s\n\n", *name, p.PublicKey.DeviceID(), p.Address, p.Role)
+		fmt.Println("In the WireGuard app: + > Create from QR code, and scan this. It is the only copy of the device's key.")
+		fmt.Println()
+		fmt.Print(code)
+		fmt.Printf("\nWith the tunnel on, open http://%s:%d/chat on the phone to chat,\n", cc.Client.ServerAddress, cc.Client.ServerPort)
+		fmt.Printf("or point any Ollama app at http://%s:%d.\n", cc.Client.ServerAddress, cc.Client.ServerPort)
+		fmt.Println("A running server picks this up automatically.")
+		return nil
 	}
 	if *out == "" {
 		*out = filepath.Join(filepath.Dir(*path), *name+".yaml")

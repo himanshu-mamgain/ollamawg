@@ -70,9 +70,11 @@ You do **not** open 11434 or 8088. Those never leave the machine.
 
 ```sh
 ollamawg add-peer --name laptop
-ollamawg add-peer --name phone --models llama3.2,gemma3:* --rpm 30
+ollamawg add-peer --name phone --qr --models llama3.2,gemma3:* --rpm 30
 ollamawg add-peer --name workstation --role admin
 ```
+
+`--qr` is for phones: instead of writing a file, it prints a QR code to scan in the WireGuard app. See [Connect a phone](#connect-a-phone).
 
 Each command does the following:
 
@@ -91,7 +93,7 @@ Roles:
 | `readonly` | model list and details only |
 | `admin` | everything, including pull, push, create, copy and delete |
 
-You can also add devices from the dashboard with **Add device**. It shows the config once, with Copy and Download buttons.
+You can also add devices from the dashboard with **Add device**. It shows the config once, with Copy and Download buttons: as YAML under **Computer**, or as a WireGuard QR code and `.conf` file under **Phone**.
 
 ## 6. Start the server
 
@@ -140,6 +142,21 @@ If a local Ollama already uses port 11434 on the device, pick another port and p
 ollamawg connect --config laptop.yaml --listen 127.0.0.1:11435
 export OLLAMA_HOST=127.0.0.1:11435
 ```
+
+The built-in chat page also works here: open `http://127.0.0.1:11434/chat`.
+
+### Connect a phone
+
+Phones use the official **WireGuard** app (App Store, Google Play) instead of `ollamawg connect`. The server is a standard WireGuard peer, so nothing else is needed.
+
+1. Add the device with `ollamawg add-peer --name phone --qr`, or in the dashboard with **Add device** then **Phone**.
+2. In the WireGuard app, tap **+**, then **Create from QR code**, and scan it. The QR code is the only copy of the phone's private key.
+3. Turn the tunnel on. Only the server's tunnel address is routed through it, so the rest of the phone's traffic is unaffected.
+4. Open **`http://10.77.0.1:11434/chat`** in the phone's browser. This is a ChatGPT-style chat page served by ollamawg. Use **Share → Add to Home Screen** to open it like an app.
+
+The chat page has no login. The phone's WireGuard key identifies it, and its role, model allowlist and rate limit apply exactly as for any other device. Chats are stored in the phone's browser only.
+
+Mobile Ollama apps such as Enchanted (iOS) or Reins (Android) also work: point them at `http://10.77.0.1:11434`.
 
 ## 8. Check it
 

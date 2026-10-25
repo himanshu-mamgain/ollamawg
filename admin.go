@@ -347,9 +347,13 @@ func (a *adminCtx) addDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	y, _ := cc.Marshal()
+	wg := cc.WireGuardConf()
+	qr, _ := QRSVG(cc.WireGuardQRText())
 	writeJSON(w, 201, map[string]any{
 		"device_id": cc.Client.PrivateKey.PublicKey().DeviceID(), "name": cc.Client.Name,
 		"address": cc.Client.Address, "filename": cc.Client.Name + ".yaml", "config": string(y),
+		"wg_filename": cc.Client.Name + ".conf", "wg_config": wg, "wg_qr_svg": qr,
+		"chat_url": fmt.Sprintf("http://%s:%d/chat", cc.Client.ServerAddress, cc.Client.ServerPort),
 	})
 }
 

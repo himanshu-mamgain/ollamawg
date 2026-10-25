@@ -135,10 +135,20 @@ func NewServer(cfg *ServerConfig, opts ServerOptions) (*Server, error) {
 		}
 	}
 	s.indexPeers(cfg)
+	srvPfx, _ := cfg.ServerPrefix()
+	tunnelOrigin := fmt.Sprintf("http://%s:%d", srvPfx.Addr(), cfg.Server.ProxyPort)
 	s.proxy = &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(up)
 			r.Out.Header.Del("Authorization") // never leak client creds upstream
+			// The built-in chat page (/chat) is served from the tunnel address,
+			// an origin Ollama's CORS check doesn't know. Its requests are
+			// same-origin, so drop Origin for them only. Matching the literal
+			// tunnel IP, not any Host, keeps DNS-rebinding pages (whose Origin
+			// and Host carry their own domain) subject to Ollama's check.
+			if o := r.In.Header.Get("Origin"); o == tunnelOrigin && "http://"+r.In.Host == tunnelOrigin {
+				r.Out.Header.Del("Origin")
+			}
 		},
 		Transport: &http.Transport{
 			Proxy:               nil, // never send Ollama traffic through an env proxy
@@ -605,6 +615,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/_ollamawg/") {
 		s.serveInternal(w, r, ps)
+		return
+	}
+	if isChatPath(r.URL.Path) && canonicalPath(r.URL) {
+		serveChat(w, r)
 		return
 	}
 

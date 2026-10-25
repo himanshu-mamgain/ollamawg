@@ -51,6 +51,8 @@ ollamawg connect --config laptop.yaml
 curl http://127.0.0.1:11434/api/tags      # any Ollama client works unchanged
 ```
 
+On a phone, run `ollamawg add-peer --name phone --qr`, scan the QR code in the official WireGuard app, and open `http://10.77.0.1:11434/chat` for a built-in chat interface.
+
 See [Getting started](docs/getting-started.md) for the full walkthrough.
 
 ## Features
@@ -70,6 +72,7 @@ See [Getting started](docs/getting-started.md) for the full walkthrough.
   - Traffic graphs per device for 1, 6 or 24 hours, plus token usage per model.
   - Prometheus `/metrics`.
 - **Dashboard:** add devices and download their config, edit policy, block and unblock, and manage firewall rules. It is one embedded page with no CDN, so it works offline.
+- **Phones and chat.** Phones connect with the official WireGuard app by scanning a QR code. A built-in, mobile-friendly chat page at `/chat`, styled like ChatGPT, streams replies from your models. Its only login is the device's WireGuard key.
 - **Two-factor login.** Optionally protect the dashboard with an authenticator app (Google Authenticator, Authy, 1Password, ...). Turn it on from the dashboard or with `ollamawg 2fa enable`.
 - **Hot reload.** `add-peer`, `block` or a hand edit of `server.yaml` applies within 2 seconds without dropping sessions.
 - **Safety checks.** The server warns if Ollama is also reachable outside the tunnel or if the config file is world-readable. Configs are written with mode 0600.

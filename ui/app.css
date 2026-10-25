@@ -265,3 +265,4 @@ body.locked > header, body.locked > main { display: none; }
 .tfa-qr { display: flex; justify-content: center; margin: 4px 0 12px; }
 .tfa-qr img { width: 220px; height: 220px; image-rendering: pixelated; border-radius: 4px; }
 #tfa-secret { word-break: break-all; user-select: all; }
+.add-kind { margin: 0 0 12px; }
