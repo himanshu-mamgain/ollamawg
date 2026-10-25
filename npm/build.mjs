@@ -60,6 +60,7 @@ for (const t of targets) {
       2
     ) + "\n"
   );
+  copyFileSync(join(root, "LICENSE"), join(dir, "LICENSE"));
   writeFileSync(join(dir, "README.md"), `# ${name}\n\nThe ${t.os}-${t.cpu} binary for [ollamawg](https://www.npmjs.com/package/ollamawg). Install \`ollamawg\` instead.\n`);
   main.optionalDependencies[name] = version;
 }

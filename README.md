@@ -108,3 +108,7 @@ go build -o ollamawg ./cmd/ollamawg
 ```
 
 Go 1.24 or newer is required. Cross-compiling works out of the box, for example `GOOS=windows GOARCH=amd64 go build ./cmd/ollamawg`.
+
+## License
+
+[MIT](LICENSE)
