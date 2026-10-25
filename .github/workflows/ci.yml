@@ -15,6 +15,15 @@ jobs:
       - run: go vet ./...
       - run: go test -race -count=1 ./...
 
+  lint-workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
+
   build:
     runs-on: ubuntu-latest
     strategy:
@@ -32,7 +41,83 @@ jobs:
         with:
           go-version: "1.24"
       - name: Build ${{ matrix.target }}
+        id: build
         run: |
-          GOOS=${TARGET%/*} GOARCH=${TARGET#*/} CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tmp/ollamawg ./cmd/ollamawg
+          goos=${TARGET%/*} goarch=${TARGET#*/}
+          ext=; [ "$goos" = windows ] && ext=.exe
+          mkdir -p dist/bin
+          GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build -trimpath \
+            -ldflags="-s -w -X github.com/himanshu-mamgain/ollamawg.Version=0.0.0-ci" \
+            -o "dist/bin/ollamawg-$goos-$goarch$ext" ./cmd/ollamawg
+          echo "name=ollamawg-$goos-$goarch" >> "$GITHUB_OUTPUT"
         env:
           TARGET: ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.name }}
+          path: dist/bin/
+          retention-days: 3
+
+  npm-pack:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ollamawg-*
+          path: dist/bin
+          merge-multiple: true
+      - run: node npm/build.mjs 0.0.0-ci
+      - name: Pack every package
+        run: |
+          mkdir -p dist/tgz
+          for dir in dist/npm/*/; do
+            npm pack "$dir" --pack-destination dist/tgz
+          done
+          ls -l dist/tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarballs
+          path: dist/tgz/
+          retention-days: 3
+
+  # Installs the packed tarballs the way a user would and runs the CLI through
+  # the launcher, on each OS that has a prebuilt binary and a hosted runner.
+  npm-smoke:
+    needs: npm-pack
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+          - os: macos-latest
+            platform: darwin-arm64
+          - os: windows-latest
+            platform: win32-x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-tarballs
+          path: tgz
+      - name: Install and run
+        run: |
+          mkdir app && cd app
+          npm init -y > /dev/null
+          npm install "../tgz/ollamawg-${{ matrix.platform }}-0.0.0-ci.tgz" ../tgz/ollamawg-0.0.0-ci.tgz
+          out=$(npx --no-install ollamawg version)
+          echo "$out"
+          [ "$out" = "0.0.0-ci" ]
