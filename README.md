@@ -1,10 +1,10 @@
 # ollamawg
 
-Reach your Ollama server from anywhere without exposing it to the internet.
+Reach your Ollama server from your laptop and phone without exposing it to the internet.
 
-`ollamawg` puts a WireGuard tunnel in front of Ollama, adds per-device access control, and gives you a dashboard on the host that shows who is connected, what they run, and who is knocking on the port. You can block a device or an IP with one click.
+`ollamawg` puts a WireGuard tunnel in front of Ollama and adds per-device access control. It gives you a dashboard on the host that shows who is connected, what they run, and who is knocking on the port, and a ChatGPT-style chat page for phones. You can block a device or an IP with one click.
 
-It is a single Go binary. WireGuard runs in user space through [wireguard-go](https://git.zx2c4.com/wireguard-go) and gVisor's network stack, so it needs no root, no kernel module and no TUN device, on the server or on clients. Keys are standard WireGuard keys.
+It is a single Go binary. WireGuard runs in user space through [wireguard-go](https://git.zx2c4.com/wireguard-go) and gVisor's network stack, so the server needs no root, no kernel module and no TUN device. Computers connect with `ollamawg connect`, which needs no admin rights either. Phones use the official WireGuard app, because the keys and protocol are standard WireGuard.
 
 ![Dashboard](docs/images/dashboard.png)
 
@@ -13,36 +13,64 @@ It is a single Go binary. WireGuard runs in user space through [wireguard-go](ht
 ## How it works
 
 ```
- device                                         machine running Ollama
-┌──────────────────────────┐   UDP 51820    ┌────────────────────────────────────────────────┐
-│ app → 127.0.0.1:11434    │  WireGuard     │ firewall → WireGuard → proxy → 127.0.0.1:11434 │
+ devices                                        machine running Ollama
+┌──────────────────────────┐                ┌────────────────────────────────────────────────┐
+│ laptop                   │   UDP 51820    │                                                │
+│ app → 127.0.0.1:11434    │   WireGuard    │ firewall → WireGuard → proxy → 127.0.0.1:11434 │
 │        ollamawg connect ─┼──(encrypted)──►│ (IP rules)  (keys)    (roles,   Ollama          │
-└──────────────────────────┘                │                        models,                  │
-                                            │                        rate, log)               │
-                                            │ dashboard on 127.0.0.1:8088                     │
+├──────────────────────────┤                │                        models,                  │
+│ phone                    │                │                        rate,                    │
+│ browser → 10.77.0.1/chat │                │                        log,                     │
+│        WireGuard app    ─┼──(encrypted)──►│                        /chat)                   │
+└──────────────────────────┘                │ dashboard on 127.0.0.1:8088                     │
                                             └────────────────────────────────────────────────┘
 ```
 
 1. **Firewall.** Every UDP packet hitting the WireGuard port is checked against your IP and CIDR rules before WireGuard sees it. Every source is counted, including scanners that never complete a handshake.
 2. **WireGuard.** Only devices whose public key you registered can complete a handshake. Each device gets one tunnel IP, and WireGuard guarantees that traffic from that IP really comes from that key.
-3. **Proxy.** Inside the tunnel, a reverse proxy enforces each device's role, model allowlist and rate limit. It logs every request with its token counts, then streams the request to Ollama on loopback.
+3. **Proxy.** Inside the tunnel, a reverse proxy enforces each device's role, model allowlist and rate limit. It logs every request with its token counts, then streams the request to Ollama on loopback. It also serves the chat page at `/chat`.
 
 Ollama itself stays on `127.0.0.1`. Nothing outside the tunnel can talk to it.
+
+## Requirements
+
+- **[Ollama](https://ollama.com/download)** on the server, listening on `127.0.0.1:11434`, which is its default. Pull at least one model, for example `ollama pull llama3.2`.
+- **A UDP port that devices can reach.** By default this is 51820.
+  - At home, forward UDP 51820 on your router to the server.
+  - On a cloud VM, open it in the security group.
+- **Behind CGNAT this won't work as-is.** Many home and mobile ISPs put customers behind carrier-grade NAT, where the router's WAN address is private (`10.x`, `100.64.x`) and no port can be forwarded. You can still:
+  - use the server's LAN address as the endpoint, which works for devices on the same network;
+  - ask your ISP for a public IP;
+  - or relay through a small VPS.
+
+  See [Troubleshooting](docs/getting-started.md#troubleshooting).
+
+## Install
+
+```sh
+npm install -g @ollamawg/cli        # prebuilt binary for Linux, macOS, Windows and FreeBSD
+npx @ollamawg/cli version           # or run it without installing
+go install github.com/himanshu-mamgain/ollamawg/cmd/ollamawg@latest
+```
+
+Standalone binaries are attached to every [GitHub Release](https://github.com/himanshu-mamgain/ollamawg/releases). A `Dockerfile` is included; see [Running as a service](docs/deploy.md#docker).
 
 ## Quickstart
 
 On the machine running Ollama:
 
 ```sh
-npm install -g @ollamawg/cli   # prebuilt binary, or:
-go install github.com/himanshu-mamgain/ollamawg/cmd/ollamawg@latest
-
 ollamawg init --endpoint your-public-ip-or-dns:51820
-ollamawg add-peer --name laptop
 ollamawg serve
 ```
 
-`init` prints the dashboard password. Open `http://127.0.0.1:8088` on the server, or reach it over SSH with `ssh -L 8088:127.0.0.1:8088 server`. Forward UDP port 51820 on your router or cloud firewall.
+`init` writes `server.yaml` and prints the dashboard password. Open `http://127.0.0.1:8088` on the server, or reach it over SSH with `ssh -L 8088:127.0.0.1:8088 server`.
+
+### Add a laptop
+
+```sh
+ollamawg add-peer --name laptop        # writes laptop.yaml
+```
 
 Copy `laptop.yaml` to the laptop, then run:
 
@@ -51,13 +79,36 @@ ollamawg connect --config laptop.yaml
 curl http://127.0.0.1:11434/api/tags      # any Ollama client works unchanged
 ```
 
-On a phone, run `ollamawg add-peer --name phone --qr`, scan the QR code in the official WireGuard app, and open `http://10.77.0.1:11434/chat` for a built-in chat interface.
+The ollama CLI, Open WebUI, LangChain, Continue and any OpenAI-compatible client pointed at `http://127.0.0.1:11434/v1` go through the tunnel. The chat page is at `http://127.0.0.1:11434/chat`.
+
+### Add a phone
+
+```sh
+ollamawg add-peer --name phone --qr    # prints a QR code
+```
+
+You can also use **Add device** in the dashboard, then **Phone**.
+
+1. In the official WireGuard app ([iOS](https://apps.apple.com/app/wireguard/id1441195209), [Android](https://play.google.com/store/apps/details?id=com.wireguard.android)), tap **+ → Create from QR code** and scan it.
+2. Turn the tunnel on and open **`http://10.77.0.1:11434/chat`**.
+3. Use **Share → Add to Home Screen** to open it like an app.
+
+Ollama apps such as Enchanted or Reins work too: point them at `http://10.77.0.1:11434`.
+
+<img src="docs/images/chat.png" alt="The chat page on a phone" width="300">
+
+<sub>Chat page on a phone, with a simulated model reply.</sub>
 
 See [Getting started](docs/getting-started.md) for the full walkthrough.
 
 ## Features
 
-- **Userspace WireGuard** on Linux, macOS, Windows and the BSDs, with no admin rights needed on clients.
+- **Userspace WireGuard** on Linux, macOS, Windows and the BSDs, with no admin rights needed on the server or on computers.
+- **Phones.** Any device with the official WireGuard app connects by scanning a QR code. Only the server's tunnel address is routed through it, so the phone's other traffic is unaffected.
+- **Chat page.** A built-in, mobile-friendly chat interface at `/chat`, served inside the tunnel.
+  - Streaming replies, Markdown and code blocks, and a model picker limited to what the device is allowed to use.
+  - Chat history kept on the device, and Add to Home Screen.
+  - It has no separate login: the device's WireGuard key is its identity, and its policy applies.
 - **Per-device policy:**
   - Roles: `user` for inference, `readonly`, `admin` for pull and delete, or custom path rules.
   - A model allowlist, such as `llama3.2,qwen3:*`.
@@ -68,51 +119,75 @@ See [Getting started](docs/getting-started.md) for the full walkthrough.
   - **Default-deny mode,** which admits only allowlisted networks.
 - **Observability:**
   - Access log with device, public IP, model, status, latency and prompt/generated token counts. It can also be written to a JSON Lines file.
-  - Security events: connects, roaming, policy denials, firewall drops and admin actions.
+  - Security events: connects, roaming, policy denials, firewall drops, logins and admin actions.
   - Traffic graphs per device for 1, 6 or 24 hours, plus token usage per model.
   - Prometheus `/metrics`.
-- **Dashboard:** add devices and download their config, edit policy, block and unblock, and manage firewall rules. It is one embedded page with no CDN, so it works offline.
-- **Phones and chat.** Phones connect with the official WireGuard app by scanning a QR code. A built-in, mobile-friendly chat page at `/chat`, styled like ChatGPT, streams replies from your models. Its only login is the device's WireGuard key.
-- **Two-factor login.** Optionally protect the dashboard with an authenticator app (Google Authenticator, Authy, 1Password, ...). Turn it on from the dashboard or with `ollamawg 2fa enable`.
+- **Dashboard:** add devices (as a config file or a phone QR code), edit policy, block and unblock, and manage firewall rules. It is one embedded page with no CDN, so it works offline.
+- **Two-factor login.** Optionally protect the dashboard with an authenticator app, such as Google Authenticator, Authy or 1Password. Turn it on from the dashboard or with `ollamawg 2fa enable`. Scripts and Prometheus then use an API token.
 - **Hot reload.** `add-peer`, `block` or a hand edit of `server.yaml` applies within 2 seconds without dropping sessions.
 - **Safety checks.** The server warns if Ollama is also reachable outside the tunnel or if the config file is world-readable. Configs are written with mode 0600.
 - **Go library.** You can embed the server, or call Ollama from Go code through the tunnel without opening a local port.
+
+## Commands
+
+```
+Server
+  init         create server.yaml with keys and a dashboard password
+  add-peer     register a device; --qr prints a QR code for the WireGuard app
+  remove-peer  delete a device
+  list-peers   show devices and rules
+  block        block --device or --ip
+  unblock      undo a block
+  serve        run the tunnel, proxy, chat page and dashboard
+  2fa          enable, disable or check two-factor dashboard login
+
+Client
+  connect      bring the tunnel up and expose Ollama on 127.0.0.1:11434
+  status       check the handshake and this device's policy
+
+Other
+  keygen       print a WireGuard key pair
+  version      print the version
+```
+
+Run `ollamawg <command> -h` for a command's flags.
 
 ## Documentation
 
 | Guide | What's in it |
 |---|---|
-| [Getting started](docs/getting-started.md) | Install, set up a server, add devices, connect |
+| [Getting started](docs/getting-started.md) | Install, set up a server, add laptops and phones, connect |
 | [Configuration](docs/configuration.md) | Every field in `server.yaml` and client configs, roles, model rules |
-| [Dashboard and admin API](docs/dashboard.md) | The UI, the HTTP API behind it, Prometheus metrics |
+| [Dashboard and admin API](docs/dashboard.md) | The UI, two-factor login, the HTTP API behind it, Prometheus metrics |
 | [Security model](docs/security.md) | What is protected, how, and what is not |
 | [Running as a service](docs/deploy.md) | systemd, launchd, Windows, Docker, port forwarding |
 | [Go library](docs/library.md) | Embedding the server and client in your own programs |
 
-## Commands
+## Limitations
 
-```
-Server                                   Client
-  init         create server.yaml          connect   tunnel + local Ollama port
-  add-peer     register a device           status    check handshake and policy
-  remove-peer  delete a device
-  list-peers   show devices and rules    Other
-  block        block --device / --ip       keygen    print a key pair
-  unblock      undo a block                version
-  serve        run tunnel, proxy, dashboard
-  2fa          two-factor dashboard login
-```
+- **Devices need to reach one UDP port on the server.** There is no relay or NAT traversal. CGNAT connections need one of the workarounds in [Requirements](#requirements).
+- **The dashboard has one admin account.** Put a reverse proxy with SSO in front if several people manage it.
+- **Chat history lives in each device's browser.** It is not synced between devices or stored on the server.
+- **No independent security audit yet.** The cryptography comes from wireguard-go and gVisor. The policy layer is small and covered by end-to-end tests. See the [Security model](docs/security.md).
 
 ## Building from source
 
 ```sh
 git clone https://github.com/himanshu-mamgain/ollamawg && cd ollamawg
-go mod tidy          # first time only: records dependency checksums in go.sum
 go test -race ./...
 go build -o ollamawg ./cmd/ollamawg
 ```
 
 Go 1.24 or newer is required. Cross-compiling works out of the box, for example `GOOS=windows GOARCH=amd64 go build ./cmd/ollamawg`.
+
+## Releasing
+
+Releases are cut from `main` by [`.github/workflows/publish.yml`](.github/workflows/publish.yml):
+
+1. In a PR, bump `version` (and its `optionalDependencies`) in `npm/cli/package.json` and `Version` in `server.go`. A test fails if they differ.
+2. Merge the PR. The workflow publishes every npm package that's missing that version, using trusted publishing with provenance, then creates the GitHub Release with binaries.
+
+A re-run finishes a release that stopped halfway.
 
 ## License
 

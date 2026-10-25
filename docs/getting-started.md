@@ -179,6 +179,16 @@ The device appears as **Connected** on the dashboard within a few seconds. Its h
 **`no handshake with server`**
 
 - **The UDP port isn't reachable.** This is the most common cause. Test from outside your network, for example over a phone hotspot.
+- **Your ISP uses CGNAT.** Port forwarding can't work then. To check:
+  - Look at the WAN address on your router's status page. If it's private (`10.x`, `100.64.x` to `100.127.x`, `172.16.x` to `172.31.x`, `192.168.x`) and differs from what `curl https://api.ipify.org` shows, you're behind CGNAT.
+  - Or run `tracert -d 8.8.8.8` (`traceroute -n` on Linux and macOS). A private address on the hop right after your router points the same way.
+
+  Your options:
+  - Use the server's LAN IP as `server.public_endpoint` for devices on the same network.
+  - Ask your ISP for a public IP.
+  - Rent a small VPS that forwards UDP 51820 to the server.
+
+  After changing the endpoint, re-add devices, because their configs contain the old one.
 - **The endpoint in the client config is wrong.**
 - **The device was blocked or removed.** Check the dashboard.
 - **The device's IP matches a firewall block rule,** or `firewall.default` is `deny`. The dashboard's "Who is knocking" table shows the device's IP with a dropped count.
