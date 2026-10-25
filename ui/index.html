@@ -21,7 +21,20 @@
     <div><dt>Running for</dt><dd id="f-uptime">…</dd></div>
   </dl>
   <button class="btn primary" id="btn-add">Add device</button>
+  <button class="btn ghost" id="btn-2fa">2FA</button>
+  <button class="btn ghost" id="btn-logout" hidden>Log out</button>
 </header>
+
+<section id="login" class="login" hidden>
+  <form id="login-form" class="login-card">
+    <h2>ollamawg dashboard</h2>
+    <p class="hint">Two-factor login is on. Enter the dashboard password and the 6-digit code from your authenticator app.</p>
+    <label>Password<input name="password" type="password" required autocomplete="current-password"></label>
+    <label>Code<input name="code" required inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" autocomplete="one-time-code" placeholder="123 456"></label>
+    <p class="login-err" id="login-err" role="alert"></p>
+    <button class="btn primary" id="login-submit">Log in</button>
+  </form>
+</section>
 
 <main>
   <section class="readout" aria-label="Last 24 hours">
@@ -134,6 +147,30 @@
     <p class="hint">Comma-separated. <code>qwen3:*</code> allows every tag of qwen3. Leave empty to allow all.</p>
     <label>Requests per minute<input name="rpm" type="number" min="0" step="1" placeholder="unlimited"></label>
     <div class="actions"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn primary" value="ok">Save policy</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-2fa">
+  <div id="tfa-off" hidden>
+    <h3>Two-factor login</h3>
+    <p>Two-factor login is <strong>off</strong>. Turn it on and the dashboard will ask for a 6-digit code from an authenticator app (Google Authenticator, Authy, 1Password, Microsoft Authenticator…) as well as the password.</p>
+    <div class="actions"><button type="button" class="btn ghost" data-close>Close</button><button type="button" class="btn primary" id="tfa-start">Enable 2FA</button></div>
+  </div>
+  <form id="tfa-setup" hidden>
+    <h3>Scan with your authenticator app</h3>
+    <div class="tfa-qr"><img id="tfa-qr" alt="QR code for your authenticator app"></div>
+    <p class="hint">Can't scan it? Enter this key by hand: <code id="tfa-secret" class="mono"></code></p>
+    <label>Code from the app<input name="code" required inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" autocomplete="one-time-code" placeholder="123 456"></label>
+    <div class="actions"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn primary">Turn on 2FA</button></div>
+  </form>
+  <form id="tfa-on" hidden>
+    <h3>Two-factor login</h3>
+    <p>Two-factor login is <strong>on</strong>. Scripts and Prometheus authenticate with the API token as <code>Authorization: Bearer &lt;token&gt;</code>:</p>
+    <pre class="cfg" id="tfa-token"></pre>
+    <p class="hint">Lost your phone? Run <code>ollamawg 2fa disable</code> on the server. To turn it off here, confirm with the password and a current code.</p>
+    <label>Password<input name="password" type="password" required autocomplete="current-password"></label>
+    <label>Code<input name="code" required inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" autocomplete="one-time-code" placeholder="123 456"></label>
+    <div class="actions"><button type="button" class="btn ghost" data-close>Close</button><button class="btn danger">Turn off 2FA</button></div>
   </form>
 </dialog>
 

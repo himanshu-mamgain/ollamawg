@@ -13,6 +13,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -39,6 +40,7 @@ Server (the machine running Ollama):
   block        block a device (--device) or an IP/CIDR (--ip)
   unblock      undo a block
   serve        run the tunnel, the Ollama proxy and the dashboard
+  2fa          enable, disable or check two-factor login for the dashboard
 
 Client (each device):
   connect      bring the tunnel up and expose Ollama on 127.0.0.1:11434
@@ -59,7 +61,7 @@ func main() {
 	cmds := map[string]func([]string) error{
 		"init": cmdInit, "add-peer": cmdAddPeer, "remove-peer": cmdRemovePeer, "list-peers": cmdListPeers,
 		"block": func(a []string) error { return cmdBlock(a, true) }, "unblock": func(a []string) error { return cmdBlock(a, false) },
-		"serve": cmdServe, "connect": cmdConnect, "status": cmdStatus, "keygen": cmdKeygen,
+		"serve": cmdServe, "2fa": cmd2FA, "connect": cmdConnect, "status": cmdStatus, "keygen": cmdKeygen,
 		"version": func([]string) error { fmt.Println(ollamawg.Version); return nil },
 	}
 	name := os.Args[1]
@@ -440,4 +442,98 @@ func cmdKeygen(args []string) error {
 	}
 	fmt.Printf("private_key: %s\npublic_key:  %s\ndevice_id:   %s\n", k, k.PublicKey(), k.PublicKey().DeviceID())
 	return nil
+}
+
+const usage2FA = `usage: ollamawg 2fa <enable|disable|status> [--config server.yaml]
+
+  enable   show a QR code for your authenticator app, confirm a code, turn 2FA on
+  disable  turn 2FA off (the recovery path if you lose your phone)
+  status   show whether 2FA is on
+
+With 2FA on, the dashboard asks for the password and a 6-digit code, and
+scripts or Prometheus use admin.api_token as a bearer token.
+`
+
+func cmd2FA(args []string) error {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		fmt.Fprint(os.Stderr, usage2FA)
+		return flag.ErrHelp
+	}
+	sub := args[0]
+	fs := newFlags("2fa " + sub)
+	path := fs.String("config", "server.yaml", "server config file")
+	force := fs.Bool("force", false, "enable: replace an existing authenticator (the old one stops working)")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	cfg, err := ollamawg.LoadServerConfig(*path)
+	if err != nil {
+		return err
+	}
+	switch sub {
+	case "status":
+		if cfg.Admin.TOTPSecret == "" {
+			fmt.Println("2FA is off. Turn it on with: ollamawg 2fa enable")
+		} else {
+			fmt.Println("2FA is on. The dashboard asks for the password and a code from your authenticator app.")
+		}
+		return nil
+
+	case "disable":
+		if cfg.Admin.TOTPSecret == "" {
+			fmt.Println("2FA is already off.")
+			return nil
+		}
+		cfg.Admin.TOTPSecret = ""
+		if err := cfg.Save(*path); err != nil {
+			return err
+		}
+		fmt.Println("2FA is off. The dashboard uses the password alone (basic auth) again.")
+		fmt.Println("A running server picks this up automatically.")
+		return nil
+
+	case "enable":
+		if cfg.Admin.TOTPSecret != "" && !*force {
+			return errors.New("2FA is already on (use --force to enroll a new authenticator)")
+		}
+		secret := ollamawg.NewTOTPSecret()
+		uri := ollamawg.TOTPURI(secret, ollamawg.TOTPAccount())
+		qr, err := ollamawg.QRTerminal(uri)
+		if err != nil {
+			return err
+		}
+		fmt.Println("Scan this with your authenticator app (Google Authenticator, Authy, 1Password, ...):")
+		fmt.Println()
+		fmt.Print(qr)
+		fmt.Printf("\nOr enter this key by hand: %s\n\n", secret)
+		in := bufio.NewReader(os.Stdin)
+		for attempt := 1; ; attempt++ {
+			fmt.Print("Enter the 6-digit code from the app: ")
+			line, err := in.ReadString('\n')
+			if _, ok := ollamawg.VerifyTOTP(secret, line, time.Now()); ok {
+				break
+			}
+			if err != nil {
+				return errors.New("no valid code entered; 2FA was not enabled")
+			}
+			if attempt == 3 {
+				return errors.New("wrong code three times; 2FA was not enabled (check the clock on this machine and your phone)")
+			}
+			fmt.Println("That code is wrong; try again.")
+		}
+		cfg.Admin.TOTPSecret = secret
+		if cfg.Admin.APIToken == "" {
+			cfg.Admin.APIToken = ollamawg.NewAPIToken()
+		}
+		if err := cfg.Save(*path); err != nil {
+			return err
+		}
+		fmt.Println("\n2FA is on. The dashboard now asks for the password and a code from the app.")
+		fmt.Printf("Scripts and Prometheus: send \"Authorization: Bearer %s\" (admin.api_token in %s).\n", cfg.Admin.APIToken, *path)
+		fmt.Printf("Lost your phone? Run: ollamawg 2fa disable --config %s\n", *path)
+		fmt.Println("A running server picks this up automatically.")
+		return nil
+	}
+	fmt.Fprint(os.Stderr, usage2FA)
+	return fmt.Errorf("unknown 2fa command %q", sub)
 }

@@ -57,6 +57,7 @@ async function api(method, path, body) {
   if (method !== 'GET') opt.headers['X-Ollamawg'] = '1';
   if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
   const r = await fetch(path, opt);
+  if (r.status === 401 && path !== '/api/login' && path !== '/api/session') checkSession();
   const ct = r.headers.get('content-type') || '';
   const data = ct.includes('json') ? await r.json() : await r.text();
   if (!r.ok) throw new Error((data && data.error) || (typeof data === 'string' && data.trim()) || r.statusText);
@@ -534,7 +535,7 @@ window.addEventListener('resize', () => { clearTimeout(rsz); rsz = setTimeout(re
 /* ---------- refresh loop ---------- */
 let failing = false;
 async function refresh(force) {
-  if (S.busy || (!force && document.hidden)) return;
+  if (S.busy || S.locked || (!force && document.hidden)) return;
   S.busy = true;
   try {
     const [ov, devs, series, models, src, fw] = await Promise.all([
@@ -560,6 +561,101 @@ async function refresh(force) {
     S.busy = false;
   }
 }
-refresh(true);
-setInterval(refresh, 3000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(true); });
+
+/* ---------- login and two-factor auth ---------- */
+const digits = v => String(v || '').replace(/\s+/g, '');
+function showLogin() {
+  if (S.locked) return;
+  S.locked = true;
+  $$('dialog[open]').forEach(d => d.close());
+  document.body.classList.add('locked');
+  $('#login').hidden = false;
+  $('#login-err').textContent = '';
+  $('#login-form').password.focus();
+}
+function unlock() {
+  S.locked = false;
+  document.body.classList.remove('locked');
+  $('#login').hidden = true;
+  $('#login-form').reset();
+  $('#btn-logout').hidden = !S.twoFactor;
+  refresh(true);
+}
+$('#login-form').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const f = ev.target;
+  $('#login-submit').disabled = true;
+  try {
+    await api('POST', '/api/login', { password: f.password.value, code: digits(f.code.value) });
+    unlock();
+  } catch (e) {
+    $('#login-err').textContent = e.message;
+    f.code.value = '';
+    f.code.focus();
+  } finally {
+    $('#login-submit').disabled = false;
+  }
+});
+$('#btn-logout').addEventListener('click', async () => {
+  try { await api('POST', '/api/logout'); } catch (e) { /* the session is gone either way */ }
+  showLogin();
+});
+
+function tfaView(name) {
+  for (const id of ['tfa-off', 'tfa-setup', 'tfa-on']) $('#' + id).hidden = id !== name;
+  const f = $('#' + name);
+  if (f.reset) f.reset();
+}
+$('#btn-2fa').addEventListener('click', async () => {
+  try {
+    const st = await api('GET', '/api/2fa');
+    $('#tfa-token').textContent = st.api_token || '';
+    tfaView(st.enabled ? 'tfa-on' : 'tfa-off');
+    $('#dlg-2fa').showModal();
+  } catch (e) { toast(e.message, true); }
+});
+$('#tfa-start').addEventListener('click', async () => {
+  try {
+    const s = await api('POST', '/api/2fa/setup');
+    $('#tfa-qr').src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s.qr_svg);
+    $('#tfa-secret').textContent = s.secret.replace(/(.{4})/g, '$1 ').trim();
+    tfaView('tfa-setup');
+    $('#tfa-setup').code.focus();
+  } catch (e) { toast(e.message, true); }
+});
+$('#tfa-setup').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  try {
+    const r = await api('POST', '/api/2fa/enable', { code: digits(ev.target.code.value) });
+    S.twoFactor = true;
+    $('#btn-logout').hidden = false;
+    $('#tfa-token').textContent = r.api_token;
+    tfaView('tfa-on');
+    toast('Two-factor login is on');
+  } catch (e) { toast(e.message, true); }
+});
+$('#tfa-on').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const f = ev.target;
+  try {
+    await api('POST', '/api/2fa/disable', { password: f.password.value, code: digits(f.code.value) });
+    toast('Two-factor login is off');
+    // The browser goes back to the password prompt (basic auth).
+    location.reload();
+  } catch (e) { toast(e.message, true); }
+});
+
+// checkSession shows the login form when 2FA is on and there is no session,
+// including when 2FA was just turned on from the CLI. It returns true then.
+async function checkSession() {
+  try {
+    const s = await api('GET', '/api/session');
+    S.twoFactor = s.two_factor;
+    $('#btn-logout').hidden = !s.two_factor;
+    if (s.two_factor && !s.authenticated) { showLogin(); return true; }
+  } catch (e) { /* refresh reports connection errors */ }
+  return false;
+}
+checkSession().then(locked => { if (!locked) refresh(true); });
+setInterval(refresh, 3000);

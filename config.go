@@ -66,6 +66,14 @@ type AdminSection struct {
 	// Password for HTTP basic auth (username "admin"). Empty disables the
 	// dashboard entirely.
 	Password string `yaml:"password"`
+	// TOTPSecret turns on two-factor login: the dashboard then asks for the
+	// password and a code from an authenticator app, and basic auth stops
+	// working. Set it with `ollamawg 2fa enable` or from the dashboard.
+	TOTPSecret string `yaml:"totp_secret,omitempty"`
+	// APIToken lets scripts and Prometheus call the admin API with
+	// "Authorization: Bearer <token>". Generated when 2FA is enabled, since
+	// basic auth is then refused.
+	APIToken string `yaml:"api_token,omitempty"`
 	// AccessLogFile, if set, appends every request as a JSON line.
 	AccessLogFile string `yaml:"access_log_file,omitempty"`
 	// LogBuffer is how many recent access/events entries to keep in memory.
@@ -264,6 +272,11 @@ func (c *ServerConfig) Validate() error {
 	u, err := url.Parse(c.Server.Upstream)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return fmt.Errorf("server.upstream must be an http(s) URL, got %q", c.Server.Upstream)
+	}
+	if c.Admin.TOTPSecret != "" {
+		if _, err := decodeTOTPSecret(c.Admin.TOTPSecret); err != nil {
+			return fmt.Errorf("admin.totp_secret: %w", err)
+		}
 	}
 	switch c.Firewall.Default {
 	case "allow", "deny":

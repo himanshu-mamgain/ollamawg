@@ -1,7 +1,6 @@
 package ollamawg
 
 import (
-	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -174,6 +173,7 @@ type adminCtx struct {
 	s        *Server
 	loopback bool
 	failLim  *rate.Limiter
+	auth     *adminAuth
 }
 
 func (s *Server) adminHandler() http.Handler {
@@ -182,7 +182,7 @@ func (s *Server) adminHandler() http.Handler {
 	s.mu.RUnlock()
 	host, _, _ := net.SplitHostPort(listen)
 	ip, err := netip.ParseAddr(host)
-	a := &adminCtx{s: s, loopback: host == "localhost" || (err == nil && ip.IsLoopback()), failLim: rate.NewLimiter(rate.Every(6*time.Second), 3)}
+	a := &adminCtx{s: s, loopback: host == "localhost" || (err == nil && ip.IsLoopback()), failLim: rate.NewLimiter(rate.Every(6*time.Second), 3), auth: newAdminAuth()}
 
 	mux := http.NewServeMux()
 	static, _ := fs.Sub(uiFS, "ui")
@@ -204,10 +204,18 @@ func (s *Server) adminHandler() http.Handler {
 	mux.HandleFunc("GET /api/series", a.series)
 	mux.HandleFunc("GET /api/models", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.obs.Models()) })
 	mux.HandleFunc("GET /metrics", a.metrics)
+	mux.HandleFunc("GET /api/session", a.sessionInfo)
+	mux.HandleFunc("POST /api/login", a.login)
+	mux.HandleFunc("POST /api/logout", a.logout)
+	mux.HandleFunc("GET /api/2fa", a.twoFactorStatus)
+	mux.HandleFunc("POST /api/2fa/setup", a.twoFactorSetup)
+	mux.HandleFunc("POST /api/2fa/enable", a.twoFactorEnable)
+	mux.HandleFunc("POST /api/2fa/disable", a.twoFactorDisable)
 	return a.guard(mux)
 }
 
-// guard enforces basic auth, DNS-rebinding and CSRF protection.
+// guard enforces authentication (see admin_auth.go), DNS-rebinding and CSRF
+// protection.
 func (a *adminCtx) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
@@ -228,20 +236,22 @@ func (a *adminCtx) guard(next http.Handler) http.Handler {
 			}
 		}
 
-		a.s.mu.RLock()
-		pass := a.s.cfg.Admin.Password
-		a.s.mu.RUnlock()
-		u, p, ok := r.BasicAuth()
-		userOK := subtle.ConstantTimeCompare([]byte(u), []byte("admin")) == 1
-		passOK := subtle.ConstantTimeCompare([]byte(p), []byte(pass)) == 1
-		if !ok || !userOK || !passOK || pass == "" {
-			if ok && a.failLim.Allow() {
+		c := a.creds()
+		ok, badBasic := a.authenticated(r, c)
+		// With 2FA on, the page itself and the login endpoints must load
+		// before there is a session. They hold no secrets.
+		public := r.URL.Path == "/api/session" || r.URL.Path == "/api/login" || r.URL.Path == "/api/logout" ||
+			(c.totpSecret != "" && r.Method == http.MethodGet && !strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/metrics")
+		if c.password == "" || (!ok && !public) {
+			if badBasic && a.failLim.Allow() {
 				a.s.obs.Event("admin", "warn", "dashboard login failed from "+r.RemoteAddr, hostOnly(r.RemoteAddr), "")
 			}
-			if ok {
+			if badBasic {
 				time.Sleep(300 * time.Millisecond)
 			}
-			h.Set("WWW-Authenticate", `Basic realm="ollamawg", charset="UTF-8"`)
+			if c.totpSecret == "" {
+				h.Set("WWW-Authenticate", `Basic realm="ollamawg", charset="UTF-8"`)
+			}
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
