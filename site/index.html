@@ -126,7 +126,7 @@
       <li>
         <h3>Create the server config</h3>
         <pre><code>ollamawg init --endpoint your-public-ip-or-dns:51820</code></pre>
-        <p>This writes <code>server.yaml</code> with fresh keys and prints the dashboard login. Forward <strong>UDP</strong> port 51820 on your router or cloud firewall to this machine.</p>
+        <p>This writes <code>server.yaml</code> with fresh keys and prints the dashboard login. On Windows it also lets devices through Windows Firewall (click <strong>Yes</strong> when asked). Forward <strong>UDP</strong> port 51820 on your router or cloud firewall to this machine.</p>
       </li>
       <li>
         <h3>Start the server</h3>
@@ -240,6 +240,7 @@ ollamawg 2fa disable   # the way back in if you lose your phone</code></pre>
             <tr><td><code>block</code> / <code>unblock</code></td><td>server</td><td>Block a device (<code>--device</code>) or an IP or network (<code>--ip</code>).</td></tr>
             <tr><td><code>passwd</code></td><td>server</td><td>Set your own dashboard username and password.</td></tr>
             <tr><td><code>2fa</code></td><td>server</td><td>Enable, disable or check two-factor dashboard login.</td></tr>
+            <tr><td><code>firewall</code></td><td>server</td><td>Let devices through the Windows Firewall (one permission prompt).</td></tr>
             <tr><td><code>connect</code></td><td>computer</td><td>Bring the tunnel up and expose Ollama on <code>127.0.0.1:11434</code>.</td></tr>
             <tr><td><code>status</code></td><td>computer</td><td>Check the handshake and this device's policy.</td></tr>
             <tr><td><code>keygen</code> / <code>version</code></td><td>any</td><td>Print a WireGuard key pair / the version.</td></tr>

@@ -87,6 +87,8 @@ ollamawg serve
 
 `init` writes `server.yaml` and prints the dashboard password. Open `http://127.0.0.1:8088` on the server, or reach it over SSH with `ssh -L 8088:127.0.0.1:8088 server`.
 
+On Windows, `init` also lets devices through Windows Firewall: click **Yes** when Windows asks for permission. If you skip it or pass `--no-firewall`, run `ollamawg firewall` later.
+
 ### Add a laptop
 
 ```sh
@@ -195,6 +197,7 @@ Server
   serve        run the tunnel, proxy, chat page and dashboard
   passwd       set your own dashboard username and password
   2fa          enable, disable or check two-factor dashboard login
+  firewall     let devices through the Windows Firewall (one permission prompt)
 
 Client
   connect      bring the tunnel up and expose Ollama on 127.0.0.1:11434

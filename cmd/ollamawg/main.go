@@ -45,6 +45,7 @@ Server (the machine running Ollama):
   serve        run the tunnel, the Ollama proxy and the dashboard
   passwd       set your own dashboard username and password
   2fa          enable, disable or check two-factor login for the dashboard
+  firewall     let devices through the Windows Firewall (one permission prompt)
 
 Client (each device):
   connect      bring the tunnel up and expose Ollama on 127.0.0.1:11434
@@ -65,7 +66,7 @@ func main() {
 	cmds := map[string]func([]string) error{
 		"init": cmdInit, "add-peer": cmdAddPeer, "reissue": cmdReissue, "remove-peer": cmdRemovePeer, "list-peers": cmdListPeers,
 		"block": func(a []string) error { return cmdBlock(a, true) }, "unblock": func(a []string) error { return cmdBlock(a, false) },
-		"serve": cmdServe, "passwd": cmdPasswd, "2fa": cmd2FA, "connect": cmdConnect, "status": cmdStatus, "keygen": cmdKeygen,
+		"serve": cmdServe, "passwd": cmdPasswd, "2fa": cmd2FA, "firewall": cmdFirewall, "connect": cmdConnect, "status": cmdStatus, "keygen": cmdKeygen,
 		"version": func([]string) error { fmt.Println(ollamawg.Version); return nil },
 	}
 	name := os.Args[1]
@@ -114,6 +115,7 @@ func cmdInit(args []string) error {
 	force := fs.Bool("force", false, "overwrite an existing config")
 	user := fs.String("user", "admin", "dashboard username")
 	setPass := fs.Bool("set-password", false, "choose the dashboard password (asked twice) instead of generating one")
+	noFirewall := fs.Bool("no-firewall", false, "don't add the Windows Firewall rule for the WireGuard port")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -150,9 +152,13 @@ func cmdInit(args []string) error {
 	if err := cfg.Save(*path); err != nil {
 		return err
 	}
+	fw := "open this port in your firewall/router"
+	if !*noFirewall {
+		fw = initFirewall(cfg.Server.ListenPort)
+	}
 	fmt.Printf("Created %s\n\n", *path)
 	fmt.Printf("  server public key  %s\n", cfg.Server.PrivateKey.PublicKey())
-	fmt.Printf("  wireguard          udp/%d  (open this port in your firewall/router)\n", cfg.Server.ListenPort)
+	fmt.Printf("  wireguard          udp/%d  (%s)\n", cfg.Server.ListenPort, fw)
 	fmt.Printf("  tunnel address     %s\n", cfg.Server.Address)
 	if *setPass {
 		fmt.Printf("  dashboard          http://%s  user: %s  password: the one you chose\n\n", cfg.Admin.Listen, cfg.Admin.Username())
@@ -408,6 +414,7 @@ func cmdServe(args []string) error {
 	if open := ollamawg.CheckUpstreamExposure(cfg.Server.Upstream); len(open) > 0 {
 		log.Warn("Ollama is reachable WITHOUT the tunnel; set OLLAMA_HOST=127.0.0.1:11434 and restart Ollama", "exposed_on", strings.Join(open, ", "))
 	}
+	warnFirewall(cfg.Server.ListenPort, log)
 	srv, err := ollamawg.NewServer(cfg, ollamawg.ServerOptions{ConfigPath: *path, Logger: log})
 	if err != nil {
 		return err
@@ -715,4 +722,59 @@ func promptNewPassword(allowEmpty bool) (string, error) {
 			return "", errors.New("password not changed")
 		}
 	}
+}
+
+// warnFirewall tells serve's user why devices would time out. It never
+// prompts: init sets the rule up, and `ollamawg firewall` is the fallback.
+func warnFirewall(port int, log *slog.Logger) {
+	if managed, allowed := firewallCheck(port); managed && !allowed {
+		log.Warn("no ollamawg rule in Windows Firewall, so devices may not reach this server; if they time out, run: ollamawg firewall", "port", port)
+	}
+}
+
+// initFirewall is init's firewall step. On Windows the firewall blocks
+// inbound UDP to new programs, so init adds ollamawg's rule (one permission
+// prompt) and setup needs no separate step. It returns a line for init's
+// summary.
+func initFirewall(port int) string {
+	managed, allowed := firewallCheck(port)
+	switch {
+	case !managed:
+		return "your firewall/router (open UDP " + fmt.Sprint(port) + " if this machine filters inbound traffic)"
+	case allowed:
+		return "Windows Firewall already allows it"
+	}
+	fmt.Println("Letting devices through Windows Firewall: click Yes when Windows asks for permission...")
+	if err := firewallAllow(port); err != nil {
+		return fmt.Sprintf("Windows Firewall NOT updated (%v); run: ollamawg firewall", err)
+	}
+	return "Windows Firewall now allows it"
+}
+
+func cmdFirewall(args []string) error {
+	fs := newFlags("firewall")
+	path := fs.String("config", "server.yaml", "server config file (for the WireGuard port)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	port := ollamawg.DefaultListenPort
+	if cfg, err := ollamawg.LoadServerConfig(*path); err == nil {
+		port = cfg.Server.ListenPort
+	}
+	managed, allowed := firewallCheck(port)
+	switch {
+	case !managed:
+		fmt.Println(strings.ReplaceAll(firewallManualHelp, "51820", fmt.Sprint(port)))
+		return nil
+	case allowed:
+		fmt.Printf("Windows Firewall already lets devices reach UDP port %d (rule %q).\n", port, firewallRuleName(port))
+		return nil
+	}
+	fmt.Println("Asking Windows for permission to add a firewall rule (click Yes)...")
+	if err := firewallAllow(port); err != nil {
+		return err
+	}
+	fmt.Printf("Done. Devices can now reach UDP port %d on private networks (rule %q).\n", port, firewallRuleName(port))
+	fmt.Println("If your Wi-Fi is set as a Public network, switch it to Private in Windows settings.")
+	return nil
 }

@@ -55,6 +55,9 @@ Useful flags:
 | `--subnet` | `10.77.0.0/24` | Tunnel address pool. Pick one that doesn't clash with your LAN or another VPN. |
 | `--upstream` | `http://127.0.0.1:11434` | Where Ollama is |
 | `--admin` | `127.0.0.1:8088` | Dashboard address. Keep it on loopback. |
+| `--user` | `admin` | Dashboard username. |
+| `--set-password` | off | Choose the dashboard password (asked twice) instead of generating one. |
+| `--no-firewall` | off | On Windows, `init` adds a Windows Firewall rule for the UDP port (one permission prompt). This skips it; add it later with `ollamawg firewall`. |
 
 ## 4. Open the UDP port
 
@@ -179,6 +182,7 @@ The device appears as **Connected** on the dashboard within a few seconds. Its h
 **`no handshake with server`**
 
 - **The UDP port isn't reachable.** This is the most common cause. Test from outside your network, for example over a phone hotspot.
+- **Windows Firewall is blocking it.** Run `ollamawg firewall` and click **Yes** on the permission prompt. `init` normally does this during setup. The rule applies to Private networks, so if Windows treats your Wi-Fi as Public, switch it to Private in Settings. If the dashboard's **Who is knocking** list stays empty while a device tries to connect, packets aren't reaching ollamawg at all, which points to a firewall, the wrong endpoint, or Wi-Fi client isolation on the router.
 - **Your ISP uses CGNAT.** Port forwarding can't work then. To check:
   - Look at the WAN address on your router's status page. If it's private (`10.x`, `100.64.x` to `100.127.x`, `172.16.x` to `172.31.x`, `192.168.x`) and differs from what `curl https://api.ipify.org` shows, you're behind CGNAT.
   - Or run `tracert -d 8.8.8.8` (`traceroute -n` on Linux and macOS). A private address on the hop right after your router points the same way.
