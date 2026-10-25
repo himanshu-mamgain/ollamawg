@@ -29,7 +29,7 @@ import (
 )
 
 // Version of ollamawg.
-var Version = "0.2.0"
+var Version = "0.2.1"
 
 // onlineWindow is how recent a handshake must be for a device to count as
 // connected. WireGuard rejects sessions older than 180 s, and clients with a

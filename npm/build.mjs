@@ -68,9 +68,23 @@ for (const t of targets) {
 const mainDir = join(out, "cli");
 cpSync(join(root, "npm", "cli"), mainDir, { recursive: true });
 writeFileSync(join(mainDir, "package.json"), JSON.stringify(main, null, 2) + "\n");
-copyFileSync(join(root, "README.md"), join(mainDir, "README.md"));
+writeFileSync(join(mainDir, "README.md"), npmReadme(readFileSync(join(root, "README.md"), "utf8")));
 for (const f of ["LICENSE", "LICENSE.md"]) {
   try { copyFileSync(join(root, f), join(mainDir, f)); } catch {}
 }
 
 console.log(`built ${targets.length + 1} packages for ${version} in ${out}`);
+
+// The README links to files in the repo (screenshots, docs) by relative path,
+// which npmjs.com can't resolve because those files aren't in the package.
+// Point them at GitHub, pinned to this release's tag so they match the code.
+function npmReadme(md) {
+  const repo = main.repository.url.replace(/^git\+/, "").replace(/\.git$/, "");
+  const raw = repo.replace("https://github.com/", "https://raw.githubusercontent.com/") + `/v${version}/`;
+  const blob = `${repo}/blob/v${version}/`;
+  const abs = p => (/\.(png|jpe?g|gif|svg|webp)$/i.test(p.split("#")[0]) ? raw : blob) + p.replace(/^\.\//, "");
+  const relative = p => !/^([a-z][a-z0-9+.-]*:|#|\/)/i.test(p);
+  return md
+    .replace(/(!?\[[^\]]*\]\()([^)\s]+)(\))/g, (m, a, p, b) => (relative(p) ? a + abs(p) + b : m))
+    .replace(/(<img\b[^>]*\bsrc=")([^"]+)(")/g, (m, a, p, b) => (relative(p) ? a + abs(p) + b : m));
+}
