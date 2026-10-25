@@ -34,6 +34,7 @@ Ollama itself stays on `127.0.0.1`. Nothing outside the tunnel can talk to it.
 On the machine running Ollama:
 
 ```sh
+npm install -g ollamawg        # prebuilt binary, or:
 go install github.com/himanshu-mamgain/ollamawg/cmd/ollamawg@latest
 
 ollamawg init --endpoint your-public-ip-or-dns:51820
