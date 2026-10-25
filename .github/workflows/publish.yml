@@ -1,0 +1,118 @@
+name: Publish
+
+# Publishes ollamawg to npm and creates the GitHub Release whenever main carries
+# a version that is missing from either. Bump "version" in
+# npm/ollamawg/package.json and Version in server.go in a PR; merging it
+# releases. Every npm package is checked separately, so a re-run finishes a
+# release that stopped halfway.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: write # GitHub Release and its tag
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      # Node 24 ships npm 11, which trusted publishing requires (>= 11.5.1).
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Check what is already published
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./npm/ollamawg/package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          MISSING=
+          for name in $(node -p "['ollamawg', ...Object.keys(require('./npm/ollamawg/package.json').optionalDependencies)].join(' ')"); do
+            if npm view "$name@$VERSION" version >/dev/null 2>&1; then
+              echo "$name@$VERSION is already on npm."
+            else
+              echo "$name@$VERSION is missing from npm."
+              MISSING="$MISSING $name"
+            fi
+          done
+          echo "missing=${MISSING# }" >> "$GITHUB_OUTPUT"
+
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -n "$MISSING" ] || ! gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.version.outputs.build == 'true'
+        name: Vet and test
+        run: |
+          go vet ./...
+          go test -count=1 ./...
+
+      - if: steps.version.outputs.build == 'true'
+        name: Build binaries
+        run: |
+          mkdir -p dist/bin
+          for target in linux/amd64 linux/arm64 darwin/arm64 darwin/amd64 windows/amd64 freebsd/amd64; do
+            goos=${target%/*} goarch=${target#*/}
+            ext=; [ "$goos" = windows ] && ext=.exe
+            GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
+              -o "dist/bin/ollamawg-$goos-$goarch$ext" ./cmd/ollamawg
+          done
+
+      - if: steps.version.outputs.build == 'true'
+        name: Build npm packages
+        run: node npm/build.mjs "${{ steps.version.outputs.version }}"
+
+      # Trusted publishing (OIDC): configure the trusted publisher on npmjs.com
+      # for each package, with this repository and workflow file (publish.yml).
+      # NPM_TOKEN is only a fallback for the very first release, before the
+      # packages exist and can be given a trusted publisher; delete the secret
+      # afterwards. Platform packages go first so the launcher never points at
+      # versions that do not exist yet.
+      - if: steps.version.outputs.missing != ''
+        name: Publish to npm
+        env:
+          MISSING: ${{ steps.version.outputs.missing }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for name in $MISSING; do
+            [ "$name" = ollamawg ] && continue
+            npm publish "dist/npm/${name#@ollamawg/}" --provenance --access public
+          done
+          case " $MISSING " in
+            *" ollamawg "*) npm publish dist/npm/ollamawg --provenance --access public ;;
+          esac
+
+      - if: steps.version.outputs.release == 'true'
+        name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: gh release create "v$VERSION" dist/bin/* --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes
