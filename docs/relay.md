@@ -40,7 +40,14 @@ Open **UDP 51820** to it in the provider's firewall or security group.
 On the VM:
 
 ```sh
-curl -fsSL https://himanshu-mamgain.github.io/ollamawg/install.sh | sh
+curl -fsSL https://himanshu-mamgain.github.io/ollamawg/install.sh 
+Or with Docker, using the image published with every release:
+
+```sh
+docker run --rm -v /etc/ollamawg:/etc/ollamawg ghcr.io/himanshu-mamgain/ollamawg relay init --config /etc/ollamawg/relay.yaml
+docker run -d --name ollamawg-relay --restart unless-stopped -p 51820:51820/udp \n  -v /etc/ollamawg:/etc/ollamawg ghcr.io/himanshu-mamgain/ollamawg relay --config /etc/ollamawg/relay.yaml
+```
+| sh
 ollamawg relay init      # writes relay.yaml and prints its token
 ollamawg relay           # runs the relay
 ```

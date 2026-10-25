@@ -69,7 +69,7 @@ npx @ollamawg/cli version           # or run it without installing
 go install github.com/himanshu-mamgain/ollamawg/cmd/ollamawg@latest
 ```
 
-You can also download a binary from any [GitHub Release](https://github.com/himanshu-mamgain/ollamawg/releases) yourself. A `Dockerfile` is included; see [Running as a service](docs/deploy.md#docker).
+You can also download a binary from any [GitHub Release](https://github.com/himanshu-mamgain/ollamawg/releases) yourself, or use the Docker image `ghcr.io/himanshu-mamgain/ollamawg` (amd64 and arm64). See [Running as a service](docs/deploy.md#docker).
 
 ## Quickstart
 

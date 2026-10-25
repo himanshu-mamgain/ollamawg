@@ -758,7 +758,7 @@ func initFirewall(port int) string {
 	managed, allowed := firewallCheck(port)
 	switch {
 	case !managed:
-		return "your firewall/router (open UDP " + fmt.Sprint(port) + " if this machine filters inbound traffic)"
+		return "open it in your router or cloud firewall, and in this machine's firewall if it has one"
 	case allowed:
 		return "Windows Firewall already allows it"
 	}

@@ -121,3 +121,16 @@ jobs:
           out=$(npx --no-install ollamawg version)
           echo "$out"
           [ "$out" = "0.0.0-ci" ]
+
+  # Builds the Docker image for both platforms (without pushing), so a broken
+  # Dockerfile shows up here rather than in the release.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false

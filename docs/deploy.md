@@ -133,16 +133,25 @@ To run the server as a real Windows service, wrap it with a service manager such
 
 ## Docker
 
-A `Dockerfile` is included in the repository.
+Every release publishes an image to GitHub Packages, for `linux/amd64` and `linux/arm64`: `ghcr.io/himanshu-mamgain/ollamawg:latest`, or pin a version such as `:0.4.1`.
 
 ```sh
-docker build -t ollamawg .
-docker run -d --name ollamawg --network host \
-  -v /etc/ollamawg:/etc/ollamawg \
-  ollamawg serve --config /etc/ollamawg/server.yaml
+# create the config once, then run the server
+docker run --rm -it -v /etc/ollamawg:/etc/ollamawg ghcr.io/himanshu-mamgain/ollamawg \
+  init --config /etc/ollamawg/server.yaml --endpoint your-public-ip:51820
+docker run -d --name ollamawg --restart unless-stopped --network host \
+  -v /etc/ollamawg:/etc/ollamawg ghcr.io/himanshu-mamgain/ollamawg
 ```
 
-The image runs as the distroless `nonroot` user (uid 65532), so give it the config directory first: `sudo chown -R 65532 /etc/ollamawg`. Build from a checkout that has `go.sum` committed; run `go mod tidy` once if it doesn't.
+The default command is `serve --config /etc/ollamawg/server.yaml`. The image runs as the distroless `nonroot` user (uid 65532), so give it the config directory first: `sudo chown -R 65532 /etc/ollamawg`. To build the image yourself instead, run `docker build -t ollamawg .` in a checkout.
+
+A relay runs from the same image. See [Relay](relay.md):
+
+```sh
+docker run --rm -v /etc/ollamawg:/etc/ollamawg ghcr.io/himanshu-mamgain/ollamawg relay init --config /etc/ollamawg/relay.yaml
+docker run -d --name ollamawg-relay --restart unless-stopped -p 51820:51820/udp \
+  -v /etc/ollamawg:/etc/ollamawg ghcr.io/himanshu-mamgain/ollamawg relay --config /etc/ollamawg/relay.yaml
+```
 
 `--network host` lets the container reach Ollama on the host's loopback and keeps the dashboard on loopback. If you run Ollama in Docker too, put both on one user-defined network instead. Set `server.upstream: http://ollama:11434`, don't publish Ollama's port, publish only `51820/udp`, and set `admin.listen: 0.0.0.0:8088` with `-p 127.0.0.1:8088:8088`.
 
