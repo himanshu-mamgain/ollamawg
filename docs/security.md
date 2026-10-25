@@ -46,16 +46,22 @@ The dashboard can create devices and lift blocks, so it is treated as privileged
 
 - It listens on `127.0.0.1:8088` by default. Reach it remotely through SSH (`ssh -L 8088:127.0.0.1:8088 host`) or over the tunnel host's own admin access. Don't expose it publicly.
 - It uses HTTP basic auth with a random 24-character password generated at `init`, compared in constant time. Failed logins are slowed and logged as security events.
+- **Two-factor login** is optional: turn it on from the dashboard's **2FA** button or with `ollamawg 2fa enable`. The dashboard then needs the password plus a code from an authenticator app (standard TOTP, RFC 6238), and basic auth is refused.
+  - A successful login sets an `HttpOnly`, `SameSite=Strict` session cookie that lasts 12 hours. Sessions live in memory, so they end when the server restarts or the authenticator is re-enrolled.
+  - Codes are accepted one step either side of now, for clock drift, and each code works once.
+  - Failed logins are throttled globally: after 10 failures, one attempt every 10 seconds.
+  - Scripts and Prometheus use `admin.api_token` as a bearer token instead of the password.
+  - If you lose the phone, run `ollamawg 2fa disable` on the server. Anyone who can do that can already read `server.yaml`, so this is no weaker than the password.
 - When bound to loopback, it refuses requests whose `Host` header isn't a loopback name. This blocks DNS-rebinding attacks from web pages you visit.
 - Every state-changing request must carry an `X-Ollamawg: 1` header, and cross-origin `Origin`s are refused. A malicious page cannot forge clicks even if your browser has cached the password.
 - It sends a strict Content-Security-Policy: no inline scripts and no third-party origins. It also sends `X-Frame-Options: DENY`.
 - New device configs, which contain the private key, are shown once and never stored on the server.
 
-Basic auth over plain HTTP is fine on loopback or an SSH tunnel. If you bind the dashboard to a LAN address, put it behind TLS, for example a reverse proxy, or keep it on a management network.
+Basic auth or a session cookie over plain HTTP is fine on loopback or an SSH tunnel. If you bind the dashboard to a LAN address, put it behind TLS, for example a reverse proxy, or keep it on a management network.
 
 ## Keys and files
 
-- `server.yaml` (server private key, dashboard password) and each `<device>.yaml` (device private key) are written with mode 0600, atomically.
+- `server.yaml` (server private key, dashboard password, 2FA secret, API token) and each `<device>.yaml` (device private key) are written with mode 0600, atomically.
 - `serve` warns if `server.yaml` is readable by other users.
 - The server only stores device **public** keys and preshared keys. Losing `server.yaml` means re-issuing configs. Leaking it means rotating everything: run `init --force` and add the devices again.
 - To revoke a device, run `remove-peer`, or press **Delete** in the dashboard. A leaked device config is useless once its peer is removed.

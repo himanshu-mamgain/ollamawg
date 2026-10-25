@@ -85,7 +85,9 @@ func TestTwoFactorLogin(t *testing.T) {
 	// Each step below uses a later time step than the one before, because a
 	// code is accepted only once.
 	c, b := h.adminReq("POST", "/api/2fa/enable", map[string]string{"code": code(setup.Secret, -30*time.Second)}, true)
-	var en struct{ APIToken string `json:"api_token"` }
+	var en struct {
+		APIToken string `json:"api_token"`
+	}
 	if json.Unmarshal(b, &en); c != 200 || en.APIToken == "" {
 		t.Fatalf("enable: %d %s", c, b)
 	}

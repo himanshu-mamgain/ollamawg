@@ -25,6 +25,8 @@ server:
 admin:
   listen: 127.0.0.1:8088             # dashboard + admin API + /metrics
   password: 3vQ...                   # basic auth, user "admin"; empty disables the dashboard
+  totp_secret: XIZL...               # optional: 2FA on (set by `ollamawg 2fa enable` or the dashboard)
+  api_token: DXcK...                 # optional: bearer token for scripts and Prometheus
   access_log_file: /var/log/ollamawg/access.jsonl   # optional, one JSON object per request
   log_buffer: 2000                   # recent requests/events kept in memory
 
@@ -73,6 +75,8 @@ peers:
 |---|---|---|
 | `listen` | `127.0.0.1:8088` | When bound to loopback, requests with any other `Host` header are refused, which prevents DNS rebinding. |
 | `password` | generated | Set it to an empty string to turn the dashboard off. |
+| `totp_secret` | none | Base32 TOTP secret. When set, the dashboard needs password + authenticator code and refuses basic auth. Remove it, or run `ollamawg 2fa disable`, to turn 2FA off. |
+| `api_token` | none | Accepted as `Authorization: Bearer <token>` on every admin endpoint. Generated when 2FA is turned on. |
 | `access_log_file` | none | Appended, never rotated by ollamawg. Use logrotate with `copytruncate`. |
 | `log_buffer` | `2000` | Entries kept in memory for the dashboard. |
 

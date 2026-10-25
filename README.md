@@ -70,6 +70,7 @@ See [Getting started](docs/getting-started.md) for the full walkthrough.
   - Traffic graphs per device for 1, 6 or 24 hours, plus token usage per model.
   - Prometheus `/metrics`.
 - **Dashboard:** add devices and download their config, edit policy, block and unblock, and manage firewall rules. It is one embedded page with no CDN, so it works offline.
+- **Two-factor login.** Optionally protect the dashboard with an authenticator app (Google Authenticator, Authy, 1Password, ...). Turn it on from the dashboard or with `ollamawg 2fa enable`.
 - **Hot reload.** `add-peer`, `block` or a hand edit of `server.yaml` applies within 2 seconds without dropping sessions.
 - **Safety checks.** The server warns if Ollama is also reachable outside the tunnel or if the config file is world-readable. Configs are written with mode 0600.
 - **Go library.** You can embed the server, or call Ollama from Go code through the tunnel without opening a local port.
@@ -96,6 +97,7 @@ Server                                   Client
   block        block --device / --ip       keygen    print a key pair
   unblock      undo a block                version
   serve        run tunnel, proxy, dashboard
+  2fa          two-factor dashboard login
 ```
 
 ## Building from source

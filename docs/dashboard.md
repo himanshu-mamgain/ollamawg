@@ -8,6 +8,20 @@ To open it from another machine without exposing it:
 ssh -L 8088:127.0.0.1:8088 you@server     # then browse http://127.0.0.1:8088
 ```
 
+## Two-factor login
+
+Press **2FA** in the header, then **Enable 2FA**. Scan the QR code with an authenticator app (Google Authenticator, Authy, 1Password, Microsoft Authenticator, ...) and type the 6-digit code it shows. From then on the dashboard opens on a login form that asks for the password and a current code, and the header gets a **Log out** button.
+
+The same setup works from a terminal on the server, which prints the QR code as text:
+
+```sh
+ollamawg 2fa enable      # scan, confirm a code
+ollamawg 2fa status
+ollamawg 2fa disable     # also the way back in if you lose your phone
+```
+
+Turning 2FA on also creates an API token (`admin.api_token` in `server.yaml`, also shown in the 2FA dialog), because scripts and Prometheus can't type codes. See [Admin API](#admin-api).
+
 ![Dashboard, dark theme](images/dashboard-dark.png)
 
 ## What's on the page
@@ -48,10 +62,11 @@ ssh -L 8088:127.0.0.1:8088 you@server     # then browse http://127.0.0.1:8088
 
 ## Admin API
 
-The dashboard is a thin client over a JSON API on the same address. Every endpoint needs basic auth. Requests that change state (`POST`, `PATCH`, `PUT`, `DELETE`) also need the header `X-Ollamawg: 1`.
+The dashboard is a thin client over a JSON API on the same address. Every endpoint needs authentication: basic auth, or with 2FA on, the API token as a bearer token. `admin.api_token` also works without 2FA once it is set. Requests that change state (`POST`, `PATCH`, `PUT`, `DELETE`) also need the header `X-Ollamawg: 1`.
 
 ```sh
-A="-u admin:$PASS -H X-Ollamawg:1"
+A="-u admin:$PASS -H X-Ollamawg:1"                               # without 2FA
+A="-H 'Authorization: Bearer $TOKEN' -H X-Ollamawg:1"            # with 2FA
 curl -s $A http://127.0.0.1:8088/api/devices | jq
 curl -s $A -X POST http://127.0.0.1:8088/api/devices/laptop/block
 curl -s $A -X POST http://127.0.0.1:8088/api/firewall -d '{"action":"block","cidr":"203.0.113.0/24","note":"scanner"}'
@@ -78,6 +93,13 @@ Wherever an endpoint takes `{id}`, you can pass the device name, its device ID, 
 | `GET /api/series` | `?window=1h\|6h\|24h` | `{"step_seconds","times":[...],"devices":{id:[points]},"drops":[...]}` |
 | `GET /api/models` | | Per-model `requests`, `prompt_tokens` and `completion_tokens` |
 | `GET /metrics` | | Prometheus text format |
+| `GET /api/session` | | `{"authenticated","two_factor"}`. Needs no auth. |
+| `POST /api/login` | `{"password","code"}` | Sets the session cookie (2FA only). Needs no auth. |
+| `POST /api/logout` | | Ends the session |
+| `GET /api/2fa` | | `{"enabled","api_token"}` |
+| `POST /api/2fa/setup` | | `{"secret","uri","qr_svg"}` for a new authenticator, not yet active |
+| `POST /api/2fa/enable` | `{"code"}` | Turns 2FA on with the secret from setup; `{"api_token"}` |
+| `POST /api/2fa/disable` | `{"password","code"}` | Turns 2FA off |
 
 A device object looks like this:
 
@@ -101,6 +123,8 @@ scrape_configs:
   - job_name: ollamawg
     static_configs: [{targets: ["127.0.0.1:8088"]}]
     basic_auth: {username: admin, password_file: /etc/prometheus/ollamawg.pass}
+    # with 2FA on, use the API token instead of basic_auth:
+    # authorization: {credentials_file: /etc/prometheus/ollamawg.token}
 ```
 
 | Metric | Type | Labels |
