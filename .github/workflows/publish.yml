@@ -115,4 +115,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
-        run: gh release create "v$VERSION" dist/bin/* --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes
+        # SHA256SUMS lets the install scripts (site/install.sh, install.ps1)
+        # verify what they download.
+        run: |
+          (cd dist/bin && sha256sum ollamawg-* > SHA256SUMS)
+          gh release create "v$VERSION" dist/bin/* --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes

@@ -85,6 +85,8 @@ function npmReadme(md) {
   const abs = p => (/\.(png|jpe?g|gif|svg|webp)$/i.test(p.split("#")[0]) ? raw : blob) + p.replace(/^\.\//, "");
   const relative = p => !/^([a-z][a-z0-9+.-]*:|#|\/)/i.test(p);
   return md
+    // GitHub alerts ("> [!IMPORTANT]") render as literal text on npm.
+    .replace(/^> \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n/gm, (m, kind) => `> **${kind[0]}${kind.slice(1).toLowerCase()}**\n>\n`)
     .replace(/(!?\[[^\]]*\]\()([^)\s]+)(\))/g, (m, a, p, b) => (relative(p) ? a + abs(p) + b : m))
     .replace(/(<img\b[^>]*\bsrc=")([^"]+)(")/g, (m, a, p, b) => (relative(p) ? a + abs(p) + b : m));
 }

@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ollamawg: private access to your Ollama from laptop and phone</title>
+<meta name="description" content="ollamawg puts a WireGuard tunnel, per-device access control, a dashboard and a ChatGPT-style chat page in front of Ollama. One binary, no root, nothing exposed to the internet.">
+<meta property="og:title" content="ollamawg">
+<meta property="og:description" content="Reach your Ollama server from your laptop and phone without exposing it to the internet.">
+<meta property="og:image" content="https://himanshu-mamgain.github.io/ollamawg/images/dashboard.png">
+<meta name="theme-color" content="#18211d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2318211D'/%3E%3Crect x='3' y='3' width='3' height='10' fill='%2335A07A'/%3E%3Crect x='8' y='6' width='5' height='2' fill='%23fff'/%3E%3Crect x='8' y='9' width='3' height='2' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script src="site.js" defer></script>
+</head>
+<body>
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top" aria-label="ollamawg home">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#24302b"/><rect x="3" y="3" width="3" height="10" fill="#35A07A"/><rect x="8" y="6" width="5" height="2" fill="#fff"/><rect x="8" y="9" width="3" height="2" fill="#fff"/></svg>
+      ollamawg
+    </a>
+    <nav aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#install">Install</a>
+      <a href="#phones">Phones</a>
+      <a href="#security">Security</a>
+      <a href="#faq">FAQ</a>
+      <a class="gh" href="https://github.com/himanshu-mamgain/ollamawg">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="wrap hero-in">
+      <div class="hero-text">
+        <p class="eyebrow">Open source · MIT · single binary</p>
+        <h1>Your Ollama on your laptop and phone. <span>Not on the internet.</span></h1>
+        <p class="lede">ollamawg puts an encrypted WireGuard tunnel in front of Ollama. It adds per-device access control, a dashboard that shows who is connected and what they run, and a ChatGPT-style chat page for phones. Ollama itself never leaves <code>127.0.0.1</code>.</p>
+        <div class="install-box" id="hero-install">
+          <div class="tabs" role="tablist" aria-label="Install method">
+            <button role="tab" data-os="win" aria-selected="false">Windows</button>
+            <button role="tab" data-os="unix" aria-selected="true">macOS / Linux</button>
+            <button role="tab" data-os="npm" aria-selected="false">npm</button>
+            <button role="tab" data-os="go" aria-selected="false">Go</button>
+          </div>
+          <div class="cmd" data-for="win" hidden><code>irm https://himanshu-mamgain.github.io/ollamawg/install.ps1 | iex</code><button class="copy" type="button">Copy</button></div>
+          <div class="cmd" data-for="unix"><code>curl -fsSL https://himanshu-mamgain.github.io/ollamawg/install.sh | sh</code><button class="copy" type="button">Copy</button></div>
+          <div class="cmd" data-for="npm" hidden><code>npm install -g @ollamawg/cli</code><button class="copy" type="button">Copy</button></div>
+          <div class="cmd" data-for="go" hidden><code>go install github.com/himanshu-mamgain/ollamawg/cmd/ollamawg@latest</code><button class="copy" type="button">Copy</button></div>
+          <p class="fine">No admin rights needed. Or download a binary from <a href="https://github.com/himanshu-mamgain/ollamawg/releases/latest">GitHub Releases</a>. Not independently audited yet; <a href="#security">see the security model</a>.</p>
+        </div>
+      </div>
+      <figure class="hero-shot">
+        <img src="images/dashboard.png" alt="The ollamawg dashboard: connected devices, traffic by device, models, sources knocking on the port, firewall rules and the request log" width="1280" height="900">
+        <figcaption>The dashboard on the server (simulated devices and traffic).</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap why">
+      <div>
+        <h2>The problem</h2>
+        <p>Ollama has no authentication. If you set <code>OLLAMA_HOST=0.0.0.0</code> and forward port 11434 so you can use your GPU box from elsewhere, anyone who finds the port can run your models, pull new ones and delete the ones you have. Scanners find these ports within hours.</p>
+      </div>
+      <div>
+        <h2>The fix</h2>
+        <p>Keep Ollama on loopback and open only a WireGuard port. WireGuard ignores every packet that isn't from a key you registered, so to the internet it looks closed. Inside the tunnel, ollamawg decides what each device may do and records what it did.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="how" class="wrap section">
+    <h2>How it works</h2>
+    <p class="sub">Every request passes three checks before it reaches Ollama.</p>
+    <div class="flow" role="img" aria-label="Devices connect over encrypted WireGuard to the server, where a firewall, WireGuard and a policy proxy sit in front of Ollama on loopback">
+      <div class="devices">
+        <div class="dev"><strong>Laptop</strong><span><code>ollamawg connect</code>: apps use <code>127.0.0.1:11434</code></span></div>
+        <div class="dev"><strong>Phone</strong><span>WireGuard app, browser at <code>10.77.0.1:11434/chat</code></span></div>
+      </div>
+      <div class="pipe"><span>UDP 51820<br>encrypted</span></div>
+      <div class="server">
+        <div class="stage"><b>1</b><strong>Firewall</strong><span>IP and CIDR rules drop packets before WireGuard sees them. Every source is counted.</span></div>
+        <div class="stage"><b>2</b><strong>WireGuard</strong><span>Only registered keys complete a handshake. Each device gets one tunnel IP.</span></div>
+        <div class="stage"><b>3</b><strong>Policy proxy</strong><span>Role, model allowlist and rate limit per device. Every request is logged with token counts.</span></div>
+        <div class="stage ollama"><strong>Ollama</strong><span>on <code>127.0.0.1:11434</code>, unreachable from outside</span></div>
+      </div>
+    </div>
+    <p class="note">WireGuard runs in user space (wireguard-go on gVisor's network stack), so the server needs no root, no kernel module and no TUN device. Keys are standard WireGuard keys, which is why the official phone apps work unchanged.</p>
+  </section>
+
+  <section class="wrap section">
+    <h2>What you get</h2>
+    <div class="grid">
+      <article class="card"><h3>Per-device policy</h3><p>Roles (<code>user</code>, <code>readonly</code>, <code>admin</code> or your own path rules), model allowlists like <code>llama3.2,qwen3:*</code>, and requests-per-minute limits.</p></article>
+      <article class="card"><h3>One-click blocking</h3><p>Block a device and its session is cut instantly. Block an IP or a whole network before it ever reaches WireGuard, or switch to default-deny.</p></article>
+      <article class="card"><h3>See everything</h3><p>Who is connected and from where, requests and tokens per device and model, policy denials, and every source knocking on the port. Prometheus metrics included.</p></article>
+      <article class="card"><h3>Phones by QR code</h3><p>Scan a QR code in the official WireGuard app. Only the server's tunnel address is routed, so the phone's other traffic is untouched.</p></article>
+      <article class="card"><h3>Built-in chat page</h3><p>A mobile-friendly chat at <code>/chat</code>: streaming replies, Markdown and code blocks, a model picker, history kept on the device, and Add to Home Screen.</p></article>
+      <article class="card"><h3>Dashboard 2FA</h3><p>Optionally protect the dashboard with Google Authenticator, Authy or 1Password. Choose your own username and password; it's stored as a bcrypt hash.</p></article>
+      <article class="card"><h3>Hot reload</h3><p>Adding, blocking or editing devices applies within 2 seconds without dropping anyone's session, whether from the CLI, the dashboard or a hand edit.</p></article>
+      <article class="card"><h3>Works with your tools</h3><p>The ollama CLI, Open WebUI, LangChain, Continue and any OpenAI-compatible client work unchanged through the tunnel. It's also a Go library.</p></article>
+    </div>
+  </section>
+
+  <section id="install" class="band">
+    <div class="wrap section">
+      <h2>Install</h2>
+      <p class="sub">Pick one. All of them give you the same <code>ollamawg</code> command.</p>
+      <div class="install-grid">
+        <div class="opt"><h3>Windows</h3><p>In PowerShell. Installs to <code>%LOCALAPPDATA%\Programs\ollamawg</code> and adds it to your PATH.</p><div class="cmd"><code>irm https://himanshu-mamgain.github.io/ollamawg/install.ps1 | iex</code><button class="copy" type="button">Copy</button></div></div>
+        <div class="opt"><h3>macOS, Linux, FreeBSD</h3><p>Installs to <code>/usr/local/bin</code> if writable, otherwise <code>~/.local/bin</code>. Never uses sudo.</p><div class="cmd"><code>curl -fsSL https://himanshu-mamgain.github.io/ollamawg/install.sh | sh</code><button class="copy" type="button">Copy</button></div></div>
+        <div class="opt"><h3>npm</h3><p>Prebuilt binaries for each platform, no install scripts. Or run it once with <code>npx @ollamawg/cli</code>.</p><div class="cmd"><code>npm install -g @ollamawg/cli</code><button class="copy" type="button">Copy</button></div></div>
+        <div class="opt"><h3>Go</h3><p>Builds from source. Needs Go 1.24 or newer.</p><div class="cmd"><code>go install github.com/himanshu-mamgain/ollamawg/cmd/ollamawg@latest</code><button class="copy" type="button">Copy</button></div></div>
+      </div>
+      <p class="note">The install scripts download from <a href="https://github.com/himanshu-mamgain/ollamawg/releases/latest">GitHub Releases</a> and check each binary against the release's <code>SHA256SUMS</code>. Read them first if you like: <a href="install.sh">install.sh</a>, <a href="install.ps1">install.ps1</a>. To pin a version, set <code>OLLAMAWG_VERSION=0.4.0</code>. A <a href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/deploy.md#docker">Dockerfile</a> is included too.</p>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <h2>Quickstart</h2>
+    <p class="sub">You need <a href="https://ollama.com/download">Ollama</a> on the server with at least one model (<code>ollama pull llama3.2</code>).</p>
+    <ol class="steps">
+      <li>
+        <h3>Create the server config</h3>
+        <pre><code>ollamawg init --endpoint your-public-ip-or-dns:51820</code></pre>
+        <p>This writes <code>server.yaml</code> with fresh keys and prints the dashboard login. Forward <strong>UDP</strong> port 51820 on your router or cloud firewall to this machine.</p>
+      </li>
+      <li>
+        <h3>Start the server</h3>
+        <pre><code>ollamawg serve</code></pre>
+        <p>Open the dashboard at <code>http://127.0.0.1:8088</code> on the server, or over SSH with <code>ssh -L 8088:127.0.0.1:8088 server</code>.</p>
+      </li>
+      <li>
+        <h3>Add a laptop</h3>
+        <pre><code>ollamawg add-peer --name laptop        # on the server: writes laptop.yaml
+ollamawg connect --config laptop.yaml  # on the laptop
+curl http://127.0.0.1:11434/api/tags   # any Ollama client now works</code></pre>
+      </li>
+      <li>
+        <h3>Add a phone</h3>
+        <pre><code>ollamawg add-peer --name phone --qr</code></pre>
+        <p>Scan the QR code in the WireGuard app, turn the tunnel on, and open <code>http://10.77.0.1:11434/chat</code>. Details below.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section id="phones" class="band">
+    <div class="wrap section phones">
+      <div class="phones-text">
+        <h2>Phones and the chat page</h2>
+        <p>Phones don't need any ollamawg software. The server is a standard WireGuard peer, so the official app does the job.</p>
+        <ol class="mini">
+          <li>Run <code>ollamawg add-peer --name phone --qr</code>, or use <strong>Add device → Phone</strong> in the dashboard.</li>
+          <li>In the WireGuard app (<a href="https://apps.apple.com/app/wireguard/id1441195209">iOS</a>, <a href="https://play.google.com/store/apps/details?id=com.wireguard.android">Android</a>), tap <strong>+ → Create from QR code</strong>, scan, and give the tunnel a name such as <code>ollamawg</code>.</li>
+          <li>Turn the tunnel on and open <strong><code>http://10.77.0.1:11434/chat</code></strong>. Use <strong>Share → Add to Home Screen</strong> to open it like an app.</li>
+        </ol>
+        <p>The chat page has no separate login: the phone's WireGuard key identifies it, and its role, model allowlist and rate limit apply. Chats stay in the phone's browser. Ollama apps such as Enchanted or Reins also work: point them at <code>http://10.77.0.1:11434</code>.</p>
+        <div class="callout"><strong>Missed the QR code or lost a config?</strong> The server never stores device private keys, so a config can't be shown twice. Run <code>ollamawg reissue --name phone --qr</code>, or press <strong>New config</strong> on the device in the dashboard. The device keeps its name, address and policy, and its old config stops working.</div>
+      </div>
+      <figure class="phone-shot">
+        <img src="images/chat.png" alt="The chat page on a phone, showing a streamed answer with a Python code block" width="390" height="844" loading="lazy">
+        <figcaption>The chat page (simulated reply).</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <h2>Dashboard login</h2>
+    <div class="two">
+      <div>
+        <h3>Username and password</h3>
+        <p><code>init</code> creates the user <code>admin</code> with a random password. To choose your own, run the command below. A password you choose is stored only as a bcrypt hash.</p>
+        <pre><code>ollamawg passwd                   # asks twice, hidden as you type
+ollamawg passwd --user yourname   # also change the username</code></pre>
+      </div>
+      <div>
+        <h3>Two-factor login</h3>
+        <p>Add a 6-digit code from an authenticator app. You can also use the <strong>2FA</strong> button in the dashboard. Scripts and Prometheus then use an API token.</p>
+        <pre><code>ollamawg 2fa enable    # scan the QR code, confirm a code
+ollamawg 2fa disable   # the way back in if you lose your phone</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="security" class="band">
+    <div class="wrap section">
+      <h2>Security model</h2>
+      <div class="callout warn status"><strong>Status: not independently audited.</strong> Treat ollamawg as an evolving security tool, not an independently verified security product. The cryptography is wireguard-go and gVisor, which are widely deployed; ollamawg's own policy, proxy and dashboard code is small and covered by end-to-end tests, but no outside party has reviewed it yet. Read the <a href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/security.md">security model</a> before relying on it, and <a href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/security.md#reporting-issues">report problems</a>.</div>
+      <div class="two">
+        <ul class="ticks">
+          <li><strong>Ollama stays on loopback.</strong> The server warns at startup if Ollama is also reachable on another address.</li>
+          <li><strong>Keys, not passwords, admit devices.</strong> Unregistered keys can't complete a handshake, and the port stays silent to them.</li>
+          <li><strong>Blocking is immediate.</strong> A blocked device's session keys are discarded; blocked IPs are dropped before decryption.</li>
+          <li><strong>Device private keys are never stored on the server.</strong> A leaked <code>server.yaml</code> can't impersonate your devices.</li>
+        </ul>
+        <ul class="ticks">
+          <li><strong>The dashboard is privileged and local.</strong> It listens on loopback, refuses DNS-rebinding hosts, needs a CSRF header for changes, and sends a strict CSP.</li>
+          <li><strong>Prompts are never logged.</strong> The access log records metadata only: device, IP, path, model, status, timing and token counts.</li>
+          <li><strong>The chat page is served inside the tunnel only,</strong> and Ollama's own origin checks still apply to everything else.</li>
+          <li><strong>Tested end to end.</strong> Policy, blocking, 2FA, the chat page's origin handling and re-issuing are covered by tests that run a real tunnel.</li>
+        </ul>
+      </div>
+      <p class="note">Full details: <a href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/security.md">Security model</a>.</p>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <h2>Requirements</h2>
+    <div class="two">
+      <div>
+        <ul class="plain">
+          <li><strong>Server:</strong> Linux, macOS, Windows or FreeBSD, with Ollama on <code>127.0.0.1:11434</code> (its default).</li>
+          <li><strong>Computers:</strong> any of the above, running <code>ollamawg connect</code>. No admin rights needed.</li>
+          <li><strong>Phones:</strong> the official WireGuard app for iOS or Android.</li>
+          <li><strong>Network:</strong> devices must reach one UDP port on the server, 51820 by default.</li>
+        </ul>
+      </div>
+      <div class="callout warn">
+        <strong>Behind CGNAT?</strong> Many home and mobile ISPs share one public IP between customers, and then no port can be forwarded to you. Your router's WAN address starts with <code>10.</code> or <code>100.64–127.</code> in that case. You can still use your LAN address as the endpoint for devices at home, ask your ISP for a public IP, or relay through a small VPS. <a href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/getting-started.md#troubleshooting">How to check</a>.
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap section">
+      <h2>Commands</h2>
+      <div class="table-wrap">
+        <table class="cmds">
+          <thead><tr><th>Command</th><th>Runs on</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>init</code></td><td>server</td><td>Create <code>server.yaml</code> with keys and a dashboard login.</td></tr>
+            <tr><td><code>serve</code></td><td>server</td><td>Run the tunnel, policy proxy, chat page and dashboard.</td></tr>
+            <tr><td><code>add-peer</code></td><td>server</td><td>Register a device; <code>--qr</code> prints a QR code for the WireGuard app.</td></tr>
+            <tr><td><code>reissue</code></td><td>server</td><td>New key and config (or QR code) for an existing device.</td></tr>
+            <tr><td><code>remove-peer</code></td><td>server</td><td>Delete a device; its key can no longer connect.</td></tr>
+            <tr><td><code>list-peers</code></td><td>server</td><td>Show devices and rules.</td></tr>
+            <tr><td><code>block</code> / <code>unblock</code></td><td>server</td><td>Block a device (<code>--device</code>) or an IP or network (<code>--ip</code>).</td></tr>
+            <tr><td><code>passwd</code></td><td>server</td><td>Set your own dashboard username and password.</td></tr>
+            <tr><td><code>2fa</code></td><td>server</td><td>Enable, disable or check two-factor dashboard login.</td></tr>
+            <tr><td><code>connect</code></td><td>computer</td><td>Bring the tunnel up and expose Ollama on <code>127.0.0.1:11434</code>.</td></tr>
+            <tr><td><code>status</code></td><td>computer</td><td>Check the handshake and this device's policy.</td></tr>
+            <tr><td><code>keygen</code> / <code>version</code></td><td>any</td><td>Print a WireGuard key pair / the version.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Run <code>ollamawg &lt;command&gt; -h</code> for a command's flags.</p>
+    </div>
+  </section>
+
+  <section id="faq" class="wrap section">
+    <h2>FAQ</h2>
+    <div class="faq">
+      <details><summary>Why not just use Tailscale?</summary><p>Tailscale is great at connecting machines, and it works through CGNAT, which ollamawg doesn't. ollamawg is about controlling an Ollama server you share. You get per-device roles, model allowlists, rate limits, token accounting, a request log and a built-in chat page, all self-hosted with no account or coordination server.</p></details>
+      <details><summary>Does it work with Open WebUI, LangChain, Continue…?</summary><p>Yes. On a computer running <code>ollamawg connect</code>, everything that talks to Ollama on <code>127.0.0.1:11434</code> goes through the tunnel unchanged, including OpenAI-compatible clients pointed at <code>http://127.0.0.1:11434/v1</code>.</p></details>
+      <details><summary>Do I need root or admin rights?</summary><p>No, on the server or on computers. WireGuard runs in user space inside the ollamawg process. Phones use the WireGuard app, which asks once for VPN permission.</p></details>
+      <details><summary>I missed the QR code. How do I get it again?</summary><p>Run <code>ollamawg reissue --name phone --qr</code>, or press <strong>New config</strong> in the dashboard. The server never keeps device private keys, so it issues a fresh one; the old config stops working.</p></details>
+      <details><summary>Is my chat history stored on the server?</summary><p>No. The chat page keeps history in the device's browser. The server's access log records metadata such as model and token counts, never prompts or replies.</p></details>
+      <details><summary>Can several people manage the dashboard?</summary><p>The dashboard has one admin account. If several people need it, put a reverse proxy with SSO in front.</p></details>
+      <details><summary>Has it been security audited?</summary><p>Not yet. Treat ollamawg as an evolving security tool, not an independently verified security product. The cryptography is wireguard-go and gVisor, which are widely deployed, and ollamawg's own code is small and tested end to end. The <a href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/security.md">security model</a> lists what it protects and what it doesn't.</p></details>
+      <details><summary>What does it cost?</summary><p>Nothing. It's open source under the MIT license.</p></details>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap section docs">
+      <h2>Documentation</h2>
+      <div class="grid docs-grid">
+        <a class="card link" href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/getting-started.md"><h3>Getting started</h3><p>Install, set up a server, add laptops and phones, troubleshoot.</p></a>
+        <a class="card link" href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/configuration.md"><h3>Configuration</h3><p>Every field in <code>server.yaml</code> and client configs, roles and model rules.</p></a>
+        <a class="card link" href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/dashboard.md"><h3>Dashboard and API</h3><p>The UI, two-factor login, the admin API and Prometheus metrics.</p></a>
+        <a class="card link" href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/security.md"><h3>Security model</h3><p>What is protected, how, and what is not.</p></a>
+        <a class="card link" href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/deploy.md"><h3>Running as a service</h3><p>systemd, launchd, Windows, Docker and port forwarding.</p></a>
+        <a class="card link" href="https://github.com/himanshu-mamgain/ollamawg/blob/main/docs/library.md"><h3>Go library</h3><p>Embed the server or client in your own programs.</p></a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <span>ollamawg · <a href="https://github.com/himanshu-mamgain/ollamawg/blob/main/LICENSE">MIT license</a></span>
+    <span><a href="https://github.com/himanshu-mamgain/ollamawg">GitHub</a> · <a href="https://www.npmjs.com/package/@ollamawg/cli">npm</a> · <a href="https://github.com/himanshu-mamgain/ollamawg/releases">Releases</a> · <a href="https://github.com/himanshu-mamgain/ollamawg/issues">Issues</a></span>
+  </div>
+</footer>
+</body>
+</html>

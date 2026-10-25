@@ -6,6 +6,11 @@ Reach your Ollama server from your laptop and phone without exposing it to the i
 
 It is a single Go binary. WireGuard runs in user space through [wireguard-go](https://git.zx2c4.com/wireguard-go) and gVisor's network stack, so the server needs no root, no kernel module and no TUN device. Computers connect with `ollamawg connect`, which needs no admin rights either. Phones use the official WireGuard app, because the keys and protocol are standard WireGuard.
 
+**Website:** https://himanshu-mamgain.github.io/ollamawg/
+
+> [!IMPORTANT]
+> **ollamawg has not had an independent security audit.** Treat it as an evolving security tool, not an independently verified security product. The cryptography comes from wireguard-go and gVisor, which are widely deployed. ollamawg's own policy, proxy and dashboard code is small and covered by end-to-end tests, but nobody outside the project has reviewed it. Read the [Security model](docs/security.md) before you rely on it, and report problems as described there.
+
 ![Dashboard](docs/images/dashboard.png)
 
 <sub>Screenshot taken with simulated devices and traffic.</sub>
@@ -47,13 +52,29 @@ Ollama itself stays on `127.0.0.1`. Nothing outside the tunnel can talk to it.
 
 ## Install
 
+No npm or Go needed: these scripts download the binary for your platform from [GitHub Releases](https://github.com/himanshu-mamgain/ollamawg/releases), check it against the release's `SHA256SUMS`, and install it without admin rights.
+
+```powershell
+# Windows (PowerShell): installs to %LOCALAPPDATA%\Programs\ollamawg and adds it to PATH
+irm https://himanshu-mamgain.github.io/ollamawg/install.ps1 | iex
+```
+
+```sh
+# macOS, Linux, FreeBSD: installs to /usr/local/bin if writable, else ~/.local/bin (never uses sudo)
+curl -fsSL https://himanshu-mamgain.github.io/ollamawg/install.sh | sh
+```
+
+You can read the scripts first: [install.ps1](site/install.ps1), [install.sh](site/install.sh). Set `OLLAMAWG_VERSION=0.4.0` to pin a version, or `OLLAMAWG_INSTALL_DIR` to choose where it goes.
+
+Or use a package manager:
+
 ```sh
 npm install -g @ollamawg/cli        # prebuilt binary for Linux, macOS, Windows and FreeBSD
 npx @ollamawg/cli version           # or run it without installing
 go install github.com/himanshu-mamgain/ollamawg/cmd/ollamawg@latest
 ```
 
-Standalone binaries are attached to every [GitHub Release](https://github.com/himanshu-mamgain/ollamawg/releases). A `Dockerfile` is included; see [Running as a service](docs/deploy.md#docker).
+You can also download a binary from any [GitHub Release](https://github.com/himanshu-mamgain/ollamawg/releases) yourself. A `Dockerfile` is included; see [Running as a service](docs/deploy.md#docker).
 
 ## Quickstart
 
@@ -202,7 +223,7 @@ Run `ollamawg <command> -h` for a command's flags.
 - **Devices need to reach one UDP port on the server.** There is no relay or NAT traversal. CGNAT connections need one of the workarounds in [Requirements](#requirements).
 - **The dashboard has one admin account.** Put a reverse proxy with SSO in front if several people manage it.
 - **Chat history lives in each device's browser.** It is not synced between devices or stored on the server.
-- **No independent security audit yet.** The cryptography comes from wireguard-go and gVisor. The policy layer is small and covered by end-to-end tests. See the [Security model](docs/security.md).
+- **No independent security audit yet.** Treat ollamawg as an evolving security tool, not an independently verified security product. The cryptography comes from wireguard-go and gVisor; the policy layer is small and covered by end-to-end tests. See the [Security model](docs/security.md).
 
 ## Building from source
 

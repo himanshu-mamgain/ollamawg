@@ -2,6 +2,9 @@
 
 This page covers what `ollamawg` protects against, how it does it, and where its protection stops.
 
+> [!IMPORTANT]
+> **Status: not independently audited.** Treat ollamawg as an evolving security tool, not an independently verified security product. Everything below describes the design and what the tests check; no outside party has reviewed the code yet. If you find a problem, see [Reporting issues](#reporting-issues).
+
 ## What it protects
 
 Ollama has no authentication. Anyone who can reach its port can do the following:
